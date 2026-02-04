@@ -521,7 +521,7 @@ function FeedPageContent() {
                 >
                   {outputType === "video" ? (
                     <video
-                      src={clip.final_url}
+                      src={clip.final_url!}
                       className="w-full h-full object-cover"
                       muted
                       playsInline
@@ -534,7 +534,7 @@ function FeedPageContent() {
                     />
                   ) : (
                     <img
-                      src={clip.final_url}
+                      src={clip.final_url!}
                       alt={clip.variant_id}
                       className="w-full h-full object-cover"
                     />
