@@ -17,7 +17,7 @@ interface GenerateBatchRequest {
   intent_text: string;
   preset_key: string;
   mode: "hook_test" | "angle_test" | "format_test";
-  batch_size: 5 | 10 | 15;
+  batch_size: 1 | 3 | 5 | 9;
   // New fields for image support
   output_type?: OutputType;
   image_type?: ImageType;
@@ -112,9 +112,9 @@ serve(async (req) => {
       );
     }
 
-    if (![5, 10, 15].includes(batch_size)) {
+    if (![1, 3, 5, 9].includes(batch_size)) {
       return new Response(
-        JSON.stringify({ error: "Invalid batch_size" }),
+        JSON.stringify({ error: "Invalid batch_size. Must be 1, 3, 5, or 9" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
