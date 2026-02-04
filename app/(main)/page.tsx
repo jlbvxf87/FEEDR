@@ -32,6 +32,7 @@ function FeedPageContent() {
   const [intentText, setIntentText] = useState("");
   const [showPresets, setShowPresets] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const manufacturingRef = useRef<HTMLDivElement>(null);
 
   // Auto-resize textarea
   const adjustTextareaHeight = useCallback(() => {
@@ -164,6 +165,11 @@ function FeedPageContent() {
     
     setIsGenerating(true);
     setError(null);
+    
+    // Scroll to manufacturing section after a brief delay
+    setTimeout(() => {
+      manufacturingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 300);
 
     try {
       const mode: BatchMode = "hook_test";
@@ -477,7 +483,7 @@ function FeedPageContent() {
 
         {/* Workflow - prompt + manufacturing steps only; no video results on feed */}
         {showManufacturing && currentBatch && (
-          <section className="space-y-4">
+          <section ref={manufacturingRef} className="space-y-4 scroll-mt-4">
             <ManufacturingPanel
               clips={clips}
               batch={currentBatch}
