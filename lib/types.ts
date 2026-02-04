@@ -12,6 +12,8 @@ export type PresetKey =
 export type BatchMode = "hook_test" | "angle_test" | "format_test";
 export type BatchSize = 5 | 10 | 15;
 export type BatchStatus = "queued" | "running" | "done" | "failed";
+export type OutputType = "video" | "image";
+export type ImageType = "product" | "lifestyle" | "ad" | "ugc" | "hero" | "custom";
 
 export type ClipStatus =
   | "planned"
@@ -19,10 +21,11 @@ export type ClipStatus =
   | "vo"
   | "rendering"
   | "assembling"
+  | "generating"
   | "ready"
   | "failed";
 
-export type JobType = "compile" | "tts" | "video" | "assemble";
+export type JobType = "compile" | "tts" | "video" | "assemble" | "image" | "image_compile";
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
 export interface PresetConfig {
@@ -68,6 +71,7 @@ export interface Batch {
   mode: BatchMode;
   batch_size: BatchSize;
   status: BatchStatus;
+  output_type: OutputType;
   error: string | null;
 }
 
@@ -89,6 +93,12 @@ export interface Clip {
   voice_url: string | null;
   raw_video_url: string | null;
   final_url: string | null;
+  // Image-specific fields
+  image_type: ImageType | null;
+  image_prompt: string | null;
+  image_url: string | null;
+  aspect_ratio: string | null;
+  // Common fields
   preset_key: string;
   winner: boolean;
   killed: boolean;
@@ -112,6 +122,9 @@ export interface GenerateBatchRequest {
   preset_key: PresetKey;
   mode: BatchMode;
   batch_size: BatchSize;
+  output_type?: OutputType;
+  image_type?: ImageType;
+  aspect_ratio?: string;
 }
 
 export interface GenerateBatchResponse {
