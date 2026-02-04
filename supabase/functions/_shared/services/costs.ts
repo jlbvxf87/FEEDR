@@ -1,7 +1,10 @@
 // FEEDR - Cost Configuration for Edge Functions
 // Mirrors lib/costs.ts for backend use
 
-export type QualityMode = "economy" | "balanced" | "premium";
+export type QualityMode = "fast" | "good" | "better";
+
+// Upsell multiplier: Our cost × 1.5 = User price (50% margin)
+export const UPSELL_MULTIPLIER = 1.5;
 
 // Quality tier configurations with model mappings
 export const QUALITY_TIERS: Record<QualityMode, {
@@ -10,34 +13,34 @@ export const QUALITY_TIERS: Record<QualityMode, {
   voiceModel: string;
   voiceService: "openai" | "elevenlabs";
   videoModel: string;
-  videoService: "runway" | "sora";
+  videoService: "sora";
   imageModel: string;
   imageService: "dalle" | "flux";
   dalleQuality: "standard" | "hd";
 }> = {
-  economy: {
+  fast: {
     scriptModel: "gpt-4o-mini",
     scriptService: "openai",
     voiceModel: "tts-1",
     voiceService: "openai",
-    videoModel: "gen-2",
-    videoService: "runway",
+    videoModel: "sora",
+    videoService: "sora",
     imageModel: "dall-e-2",
     imageService: "dalle",
     dalleQuality: "standard",
   },
-  balanced: {
+  good: {
     scriptModel: "claude-3-5-haiku-20241022",
     scriptService: "claude",
     voiceModel: "eleven_turbo_v2_5",
     voiceService: "elevenlabs",
-    videoModel: "gen-3",
-    videoService: "runway",
+    videoModel: "sora",
+    videoService: "sora",
     imageModel: "dall-e-3",
     imageService: "dalle",
     dalleQuality: "standard",
   },
-  premium: {
+  better: {
     scriptModel: "claude-sonnet-4-20250514",
     scriptService: "claude",
     voiceModel: "eleven_multilingual_v2",
@@ -62,37 +65,49 @@ export function analyzeComplexity(prompt: string): {
   const hasTechnicalTerms = /4k|hdr|raw|professional|studio|high.?quality/i.test(prompt);
   
   let complexity: "simple" | "moderate" | "complex" = "simple";
-  let suggestedMode: QualityMode = "economy";
+  let suggestedMode: QualityMode = "fast";
   let reason = "";
   
   if (words < 10 && !hasCreativeKeywords && !hasSpecificRequirements) {
     complexity = "simple";
-    suggestedMode = "economy";
-    reason = "Simple prompt, economy mode is sufficient";
+    suggestedMode = "fast";
+    reason = "Simple prompt, fast mode is sufficient";
   } else if (hasCreativeKeywords || hasTechnicalTerms || words > 30) {
     complexity = "complex";
-    suggestedMode = "premium";
-    reason = "Creative/technical requirements benefit from premium models";
+    suggestedMode = "better";
+    reason = "Creative/technical requirements benefit from better models";
   } else {
     complexity = "moderate";
-    suggestedMode = "balanced";
-    reason = "Balanced mode offers good quality for this prompt";
+    suggestedMode = "good";
+    reason = "Good mode offers great quality for this prompt";
   }
   
   return { complexity, suggestedMode, reason };
 }
 
-// Estimate costs in cents
+// Base costs in cents (our actual costs)
+const BASE_COSTS = {
+  fast: { video: 15, image: 3 },
+  good: { video: 45, image: 10 },
+  better: { video: 85, image: 15 },
+};
+
+// Estimate costs in cents (includes upsell - what user pays)
 export function estimateCost(
   mode: QualityMode,
   outputType: "video" | "image",
   count: number
 ): number {
-  const baseCosts = {
-    economy: { video: 15, image: 3 },
-    balanced: { video: 45, image: 10 },
-    premium: { video: 85, image: 15 },
-  };
-  
-  return baseCosts[mode][outputType] * count;
+  const baseCost = BASE_COSTS[mode][outputType] * count;
+  // Apply upsell multiplier for user-facing price
+  return Math.round(baseCost * UPSELL_MULTIPLIER);
+}
+
+// Get base cost (our actual cost, without upsell)
+export function getBaseCost(
+  mode: QualityMode,
+  outputType: "video" | "image",
+  count: number
+): number {
+  return BASE_COSTS[mode][outputType] * count;
 }

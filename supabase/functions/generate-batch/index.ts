@@ -1,6 +1,6 @@
 // FEEDR Terminal - Generate Batch Edge Function
 // POST /functions/v1/generate-batch
-// Supports both VIDEO and IMAGE generation
+// Supports both VIDEO and IMAGE generation with billing
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
@@ -10,21 +10,28 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Upsell multiplier - user pays base cost × this value
+const UPSELL_MULTIPLIER = 1.5;
+
 type OutputType = "video" | "image";
 type ImageType = "product" | "lifestyle" | "ad" | "ugc" | "hero" | "custom";
+type QualityMode = "fast" | "good" | "better";
 
 interface GenerateBatchRequest {
   intent_text: string;
   preset_key: string;
   mode: "hook_test" | "angle_test" | "format_test";
-  batch_size: 1 | 3 | 5 | 9;
-  // New fields for image support
+  batch_size: 2 | 4 | 6 | 8;
+  // Output type
   output_type?: OutputType;
   image_type?: ImageType;
   aspect_ratio?: string;
   // Smart image packs
   image_pack?: string;
   image_prompts?: Array<{ prompt: string; aspectRatio: string; type: string }>;
+  // Billing fields
+  quality_mode?: QualityMode;
+  estimated_cost?: number; // User charge in cents (already includes upsell)
 }
 
 // Simple AUTO preset resolver
@@ -78,10 +85,20 @@ serve(async (req) => {
   }
 
   try {
-    // Initialize Supabase client
+    // Initialize Supabase clients
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get user from auth header (if authenticated)
+    const authHeader = req.headers.get("Authorization");
+    let userId: string | null = null;
+    
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user } } = await supabase.auth.getUser(token);
+      userId = user?.id || null;
+    }
 
     // Parse request body
     const body: GenerateBatchRequest = await req.json();
@@ -95,7 +112,14 @@ serve(async (req) => {
       aspect_ratio = "1:1",
       image_pack = "auto",
       image_prompts,
+      quality_mode = "good",
+      estimated_cost = 0,
     } = body;
+    
+    // Calculate costs
+    // estimated_cost from frontend is already the user charge (includes upsell)
+    const userChargeCents = estimated_cost;
+    const baseCostCents = Math.round(userChargeCents / UPSELL_MULTIPLIER);
 
     // Validate input
     if (!intent_text?.trim()) {
@@ -112,9 +136,9 @@ serve(async (req) => {
       );
     }
 
-    if (![1, 3, 5, 9].includes(batch_size)) {
+    if (![2, 4, 6, 8].includes(batch_size)) {
       return new Response(
-        JSON.stringify({ error: "Invalid batch_size. Must be 1, 3, 5, or 9" }),
+        JSON.stringify({ error: "Invalid batch_size. Must be 2, 4, 6, or 8" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -129,7 +153,27 @@ serve(async (req) => {
     // Resolve preset for AUTO
     const resolvedPreset = resolvePreset(intent_text, preset_key, output_type);
 
-    // 1. Create batch row
+    // Check user credits if authenticated and billing is enabled
+    if (userId && userChargeCents > 0) {
+      const { data: credits } = await supabase
+        .from("user_credits")
+        .select("balance_cents")
+        .eq("user_id", userId)
+        .single();
+      
+      if (!credits || credits.balance_cents < userChargeCents) {
+        return new Response(
+          JSON.stringify({ 
+            error: "Insufficient credits", 
+            required: userChargeCents,
+            available: credits?.balance_cents || 0 
+          }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // 1. Create batch row with billing info
     const { data: batch, error: batchError } = await supabase
       .from("batches")
       .insert({
@@ -139,6 +183,11 @@ serve(async (req) => {
         batch_size,
         output_type,
         status: "queued",
+        user_id: userId,
+        quality_mode,
+        base_cost_cents: baseCostCents,
+        user_charge_cents: userChargeCents,
+        payment_status: userId ? "pending" : "free", // Free if no user (dev mode)
       })
       .select()
       .single();
@@ -147,13 +196,32 @@ serve(async (req) => {
       throw new Error(`Failed to create batch: ${batchError.message}`);
     }
 
-    // 2. Update batch to running
+    // 2. Deduct credits if user is authenticated
+    if (userId && userChargeCents > 0) {
+      const { data: deductResult, error: deductError } = await supabase
+        .rpc("deduct_credits", {
+          p_user_id: userId,
+          p_batch_id: batch.id,
+          p_amount_cents: userChargeCents,
+        });
+      
+      if (deductError || deductResult === false) {
+        // Rollback batch if credit deduction fails
+        await supabase.from("batches").delete().eq("id", batch.id);
+        return new Response(
+          JSON.stringify({ error: "Failed to process payment" }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // 3. Update batch to running
     await supabase
       .from("batches")
       .update({ status: "running" })
       .eq("id", batch.id);
 
-    // 3. Create clip rows (structure varies by output type)
+    // 4. Create clip rows (structure varies by output type)
     const clipsToInsert = [];
     const clipCount = output_type === "image" && image_prompts ? image_prompts.length : batch_size;
     
@@ -191,7 +259,7 @@ serve(async (req) => {
       throw new Error(`Failed to create clips: ${clipsError.message}`);
     }
 
-    // 4. Enqueue appropriate job based on output type
+    // 5. Enqueue appropriate job based on output type
     // For images with pre-generated prompts, skip compile and go straight to image jobs
     if (output_type === "image" && image_prompts && image_prompts.length > 0) {
       // Get the clip IDs we just created
@@ -239,9 +307,17 @@ serve(async (req) => {
       if (jobError) throw new Error(`Failed to create job: ${jobError.message}`);
     }
 
-    // Return batch_id
+    // Return batch_id with billing info
     return new Response(
-      JSON.stringify({ batch_id: batch.id, output_type }),
+      JSON.stringify({ 
+        batch_id: batch.id, 
+        output_type,
+        billing: {
+          base_cost_cents: baseCostCents,
+          user_charge_cents: userChargeCents,
+          quality_mode,
+        }
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 

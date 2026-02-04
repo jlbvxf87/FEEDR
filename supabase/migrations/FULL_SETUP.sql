@@ -29,9 +29,15 @@ CREATE TABLE IF NOT EXISTS batches (
   intent_text TEXT NOT NULL,
   preset_key TEXT NOT NULL,
   mode TEXT NOT NULL CHECK (mode IN ('hook_test', 'angle_test', 'format_test')),
-  batch_size INTEGER NOT NULL CHECK (batch_size IN (1, 3, 5, 9)),
+  batch_size INTEGER NOT NULL CHECK (batch_size IN (2, 4, 6, 8)),
   status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'done', 'failed')),
-  error TEXT NULL
+  error TEXT NULL,
+  -- Billing fields
+  user_id UUID REFERENCES auth.users(id),
+  quality_mode TEXT DEFAULT 'good',
+  base_cost_cents INTEGER DEFAULT 0,
+  user_charge_cents INTEGER DEFAULT 0,
+  payment_status TEXT DEFAULT 'pending' CHECK (payment_status IN ('pending', 'charged', 'failed', 'refunded', 'free'))
 );
 
 -- Add updated_at if it doesn't exist (for existing databases)
@@ -398,6 +404,202 @@ FROM clips;
 
 -- Index for cleanup queries
 CREATE INDEX IF NOT EXISTS idx_clips_cleanup ON clips(killed, winner, deleted_at, created_at) WHERE deleted_at IS NULL;
+
+-- ============================================
+-- BILLING SYSTEM (from 0007_billing_system.sql)
+-- ============================================
+
+-- USER CREDITS TABLE (pay-as-you-go wallet)
+CREATE TABLE IF NOT EXISTS user_credits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  balance_cents INTEGER NOT NULL DEFAULT 0,
+  lifetime_added_cents INTEGER NOT NULL DEFAULT 0,
+  lifetime_spent_cents INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_credits_user ON user_credits(user_id);
+
+-- CREDIT TRANSACTIONS TABLE (audit trail)
+CREATE TABLE IF NOT EXISTS credit_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  amount_cents INTEGER NOT NULL,
+  balance_after_cents INTEGER NOT NULL,
+  transaction_type TEXT NOT NULL CHECK (transaction_type IN (
+    'purchase', 'generation', 'refund', 'bonus', 'subscription', 'adjustment'
+  )),
+  description TEXT,
+  batch_id UUID REFERENCES batches(id) ON DELETE SET NULL,
+  stripe_payment_id TEXT,
+  metadata_json JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_credit_tx_user ON credit_transactions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_credit_tx_type ON credit_transactions(transaction_type);
+CREATE INDEX IF NOT EXISTS idx_credit_tx_batch ON credit_transactions(batch_id);
+
+-- PRICING CONFIG TABLE
+CREATE TABLE IF NOT EXISTS pricing_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key TEXT UNIQUE NOT NULL,
+  value_json JSONB NOT NULL,
+  description TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO pricing_config (key, value_json, description) VALUES 
+  ('upsell_multiplier', '1.5', 'Multiplier applied to base cost (1.5 = 50% margin)'),
+  ('free_credits_signup', '500', 'Free credits given on signup (in cents, e.g., 500 = $5)'),
+  ('min_purchase_cents', '500', 'Minimum credit purchase amount (500 = $5)')
+ON CONFLICT (key) DO NOTHING;
+
+-- BILLING SUMMARY VIEW
+CREATE OR REPLACE VIEW billing_summary AS
+SELECT 
+  DATE_TRUNC('day', created_at) as date,
+  COUNT(*) as total_batches,
+  SUM(base_cost_cents) as total_api_cost_cents,
+  SUM(user_charge_cents) as total_revenue_cents,
+  SUM(user_charge_cents - base_cost_cents) as total_profit_cents
+FROM batches
+WHERE status = 'done' AND payment_status = 'charged'
+GROUP BY DATE_TRUNC('day', created_at)
+ORDER BY date DESC;
+
+-- FUNCTION: Deduct credits
+CREATE OR REPLACE FUNCTION deduct_credits(
+  p_user_id UUID,
+  p_batch_id UUID,
+  p_amount_cents INTEGER
+) RETURNS BOOLEAN AS $$
+DECLARE
+  v_current_balance INTEGER;
+  v_new_balance INTEGER;
+BEGIN
+  SELECT balance_cents INTO v_current_balance
+  FROM user_credits WHERE user_id = p_user_id FOR UPDATE;
+  
+  IF v_current_balance IS NULL OR v_current_balance < p_amount_cents THEN
+    RETURN FALSE;
+  END IF;
+  
+  v_new_balance := v_current_balance - p_amount_cents;
+  
+  UPDATE user_credits SET 
+    balance_cents = v_new_balance,
+    lifetime_spent_cents = lifetime_spent_cents + p_amount_cents,
+    updated_at = now()
+  WHERE user_id = p_user_id;
+  
+  INSERT INTO credit_transactions (
+    user_id, amount_cents, balance_after_cents, 
+    transaction_type, batch_id, description
+  ) VALUES (
+    p_user_id, -p_amount_cents, v_new_balance,
+    'generation', p_batch_id, 'Batch generation'
+  );
+  
+  UPDATE batches SET payment_status = 'charged' WHERE id = p_batch_id;
+  
+  RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- FUNCTION: Add credits
+CREATE OR REPLACE FUNCTION add_credits(
+  p_user_id UUID,
+  p_amount_cents INTEGER,
+  p_type TEXT,
+  p_description TEXT DEFAULT NULL,
+  p_stripe_payment_id TEXT DEFAULT NULL
+) RETURNS INTEGER AS $$
+DECLARE
+  v_new_balance INTEGER;
+BEGIN
+  INSERT INTO user_credits (user_id, balance_cents, lifetime_added_cents)
+  VALUES (p_user_id, p_amount_cents, p_amount_cents)
+  ON CONFLICT (user_id) DO UPDATE SET
+    balance_cents = user_credits.balance_cents + p_amount_cents,
+    lifetime_added_cents = user_credits.lifetime_added_cents + p_amount_cents,
+    updated_at = now()
+  RETURNING balance_cents INTO v_new_balance;
+  
+  INSERT INTO credit_transactions (
+    user_id, amount_cents, balance_after_cents,
+    transaction_type, description, stripe_payment_id
+  ) VALUES (
+    p_user_id, p_amount_cents, v_new_balance,
+    p_type, p_description, p_stripe_payment_id
+  );
+  
+  RETURN v_new_balance;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- FUNCTION: Refund batch
+CREATE OR REPLACE FUNCTION refund_batch(p_batch_id UUID) RETURNS BOOLEAN AS $$
+DECLARE
+  v_user_id UUID;
+  v_charge_cents INTEGER;
+  v_new_balance INTEGER;
+BEGIN
+  SELECT user_id, user_charge_cents INTO v_user_id, v_charge_cents
+  FROM batches WHERE id = p_batch_id AND payment_status = 'charged';
+  
+  IF v_user_id IS NULL THEN RETURN FALSE; END IF;
+  
+  UPDATE user_credits SET balance_cents = balance_cents + v_charge_cents, updated_at = now()
+  WHERE user_id = v_user_id RETURNING balance_cents INTO v_new_balance;
+  
+  INSERT INTO credit_transactions (
+    user_id, amount_cents, balance_after_cents,
+    transaction_type, batch_id, description
+  ) VALUES (v_user_id, v_charge_cents, v_new_balance, 'refund', p_batch_id, 'Refund for failed batch');
+  
+  UPDATE batches SET payment_status = 'refunded' WHERE id = p_batch_id;
+  
+  RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- TRIGGER: Auto-create credits on signup
+CREATE OR REPLACE FUNCTION handle_new_user_credits() RETURNS TRIGGER AS $$
+DECLARE v_signup_bonus INTEGER;
+BEGIN
+  SELECT (value_json::TEXT)::INTEGER INTO v_signup_bonus
+  FROM pricing_config WHERE key = 'free_credits_signup';
+  v_signup_bonus := COALESCE(v_signup_bonus, 500);
+  
+  INSERT INTO user_credits (user_id, balance_cents, lifetime_added_cents)
+  VALUES (NEW.id, v_signup_bonus, v_signup_bonus);
+  
+  INSERT INTO credit_transactions (
+    user_id, amount_cents, balance_after_cents, transaction_type, description
+  ) VALUES (NEW.id, v_signup_bonus, v_signup_bonus, 'bonus', 'Welcome bonus');
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created_credits ON auth.users;
+CREATE TRIGGER on_auth_user_created_credits
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION handle_new_user_credits();
+
+-- RLS for billing tables
+ALTER TABLE user_credits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE credit_transactions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own credits" ON user_credits FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Users can view own transactions" ON credit_transactions FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Service role full access to user_credits" ON user_credits FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service role full access to credit_transactions" ON credit_transactions FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Authenticated users can read pricing" ON pricing_config FOR SELECT USING (auth.role() = 'authenticated' OR auth.role() = 'service_role');
 
 -- ============================================
 -- DONE! Your database is ready.

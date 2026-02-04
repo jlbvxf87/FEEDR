@@ -1,9 +1,12 @@
 // FEEDR - Cost Configuration & Smart Model Routing
 // Defines pricing tiers and optimal model selection
 
-export type QualityMode = "economy" | "balanced" | "premium";
+export type QualityMode = "fast" | "good" | "better";
 
-// Cost per 1M tokens (in cents)
+// Upsell multiplier: Our cost × 1.5 = User price (50% margin)
+export const UPSELL_MULTIPLIER = 1.5;
+
+// Cost per 1M tokens (in cents) - BASE COSTS (our actual costs)
 export const MODEL_COSTS = {
   // Script/Brain models
   script: {
@@ -27,8 +30,6 @@ export const MODEL_COSTS = {
   // Video models (cost per second in cents)
   video: {
     "sora": { perSecond: 5, quality: 0.95 },
-    "runway-gen3": { perSecond: 2.5, quality: 0.85 },
-    "runway-gen2": { perSecond: 1.5, quality: 0.7 },
   },
   
   // Image models (cost per image in cents)
@@ -58,44 +59,45 @@ export const QUALITY_TIERS: Record<QualityMode, {
   imageModel: string;
   costMultiplier: number;
 }> = {
-  economy: {
-    label: "Economy",
-    description: "Fastest & cheapest, good for testing",
-    icon: "💰",
+  fast: {
+    label: "Fast",
+    description: "Quickest results, budget-friendly",
+    icon: "⚡",
     scriptModel: "gpt-4o-mini",
     voiceModel: "openai-tts-1",
-    videoModel: "runway-gen2",
+    videoModel: "sora",
     imageModel: "dall-e-2",
-    costMultiplier: 0.3,
+    costMultiplier: 1.0, // Base tier - no additional multiplier
   },
-  balanced: {
-    label: "Balanced",
-    description: "Great quality, reasonable cost",
-    icon: "⚖️",
+  good: {
+    label: "Good",
+    description: "Great quality, balanced cost",
+    icon: "✓",
     scriptModel: "claude-3-5-haiku-20241022",
     voiceModel: "elevenlabs-turbo",
-    videoModel: "runway-gen3",
+    videoModel: "sora",
     imageModel: "dall-e-3",
-    costMultiplier: 0.6,
+    costMultiplier: 1.0, // Uses actual model costs
   },
-  premium: {
-    label: "Premium",
-    description: "Best quality, higher cost",
-    icon: "✨",
+  better: {
+    label: "Better",
+    description: "Premium quality, best results",
+    icon: "★",
     scriptModel: "claude-sonnet-4-20250514",
     voiceModel: "elevenlabs-standard",
     videoModel: "sora",
     imageModel: "dall-e-3-hd",
-    costMultiplier: 1.0,
+    costMultiplier: 1.0, // Uses actual model costs
   },
 };
 
 // Estimate cost for a single video
+// Returns user-facing price (base cost × upsell multiplier)
 export function estimateVideoCost(
   mode: QualityMode,
   durationSeconds: number = 15,
   scriptLength: number = 150
-): { total: number; breakdown: Record<string, number> } {
+): { total: number; baseCost: number; breakdown: Record<string, number> } {
   const tier = QUALITY_TIERS[mode];
   
   // Script cost (assuming ~500 input tokens, ~200 output tokens)
@@ -122,16 +124,20 @@ export function estimateVideoCost(
     assembly: assemblyCost,
   };
   
-  const total = Object.values(breakdown).reduce((a, b) => a + b, 0);
+  // Base cost is our actual cost
+  const baseCost = Object.values(breakdown).reduce((a, b) => a + b, 0);
+  // User pays base cost × upsell multiplier
+  const total = Math.round(baseCost * UPSELL_MULTIPLIER);
   
-  return { total: Math.round(total), breakdown };
+  return { total, baseCost: Math.round(baseCost), breakdown };
 }
 
 // Estimate cost for a batch of images
+// Returns user-facing price (base cost × upsell multiplier)
 export function estimateImageCost(
   mode: QualityMode,
-  count: number = 9
-): { total: number; breakdown: Record<string, number> } {
+  count: number = 8
+): { total: number; baseCost: number; breakdown: Record<string, number> } {
   const tier = QUALITY_TIERS[mode];
   
   // Script cost for prompts
@@ -149,21 +155,26 @@ export function estimateImageCost(
     images: Math.round(imageCost * 100) / 100,
   };
   
-  const total = Object.values(breakdown).reduce((a, b) => a + b, 0);
+  // Base cost is our actual cost
+  const baseCost = Object.values(breakdown).reduce((a, b) => a + b, 0);
+  // User pays base cost × upsell multiplier
+  const total = Math.round(baseCost * UPSELL_MULTIPLIER);
   
-  return { total: Math.round(total), breakdown };
+  return { total, baseCost: Math.round(baseCost), breakdown };
 }
 
 // Estimate batch cost
+// Returns user-facing price (includes upsell) and base cost (our actual cost)
 export function estimateBatchCost(
   mode: QualityMode,
   outputType: "video" | "image",
   batchSize: number
-): { totalCents: number; perItemCents: number; breakdown: Record<string, number> } {
+): { totalCents: number; baseCostCents: number; perItemCents: number; breakdown: Record<string, number> } {
   if (outputType === "image") {
     const estimate = estimateImageCost(mode, batchSize);
     return {
       totalCents: estimate.total,
+      baseCostCents: estimate.baseCost,
       perItemCents: Math.round(estimate.total / batchSize),
       breakdown: estimate.breakdown,
     };
@@ -172,6 +183,7 @@ export function estimateBatchCost(
   const estimate = estimateVideoCost(mode);
   return {
     totalCents: estimate.total * batchSize,
+    baseCostCents: estimate.baseCost * batchSize,
     perItemCents: estimate.total,
     breakdown: estimate.breakdown,
   };
@@ -189,21 +201,21 @@ export function analyzeComplexity(prompt: string): {
   const hasTechnicalTerms = /4k|hdr|raw|professional|studio|high.?quality/i.test(prompt);
   
   let complexity: "simple" | "moderate" | "complex" = "simple";
-  let suggestedMode: QualityMode = "economy";
+  let suggestedMode: QualityMode = "fast";
   let reason = "";
   
   if (words < 10 && !hasCreativeKeywords && !hasSpecificRequirements) {
     complexity = "simple";
-    suggestedMode = "economy";
-    reason = "Simple prompt, economy mode is sufficient";
+    suggestedMode = "fast";
+    reason = "Simple prompt, fast mode is sufficient";
   } else if (hasCreativeKeywords || hasTechnicalTerms || words > 30) {
     complexity = "complex";
-    suggestedMode = "premium";
-    reason = "Creative/technical requirements benefit from premium models";
+    suggestedMode = "better";
+    reason = "Creative/technical requirements benefit from better models";
   } else {
     complexity = "moderate";
-    suggestedMode = "balanced";
-    reason = "Balanced mode offers good quality for this prompt";
+    suggestedMode = "good";
+    reason = "Good mode offers great quality for this prompt";
   }
   
   return { complexity, suggestedMode, reason };

@@ -28,7 +28,7 @@ export class FeedrBrain implements OrchestratorService {
   /**
    * Get optimal model configuration based on quality mode
    */
-  getModelConfig(mode: QualityMode = "balanced") {
+  getModelConfig(mode: QualityMode = "good") {
     return QUALITY_TIERS[mode];
   }
 
@@ -37,7 +37,7 @@ export class FeedrBrain implements OrchestratorService {
    */
   selectQualityMode(prompt: string, userPreference?: QualityMode): {
     mode: QualityMode;
-    config: typeof QUALITY_TIERS.balanced;
+    config: typeof QUALITY_TIERS.good;
     reason: string;
     estimatedCostCents: number;
   } {
@@ -72,9 +72,9 @@ export class FeedrBrain implements OrchestratorService {
     );
     
     // Use appropriate model based on quality mode
-    const parseModel = qualitySelection.mode === "economy" 
+    const parseModel = qualitySelection.mode === "fast" 
       ? "claude-3-haiku-20240307"
-      : qualitySelection.mode === "balanced"
+      : qualitySelection.mode === "good"
         ? "claude-3-5-haiku-20241022"
         : this.model;
 
@@ -113,7 +113,7 @@ export class FeedrBrain implements OrchestratorService {
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         const outputType = parsed.output_type || "video";
-        const batchSize = outputType === "video" ? 3 : 9;
+        const batchSize = outputType === "video" ? 4 : 4; // Default middle batch sizes
         
         // Calculate estimated cost
         const estimatedCost = estimateCost(qualitySelection.mode, outputType, batchSize);
@@ -147,7 +147,7 @@ export class FeedrBrain implements OrchestratorService {
     const isImage = /photo|image|picture|shot/.test(text);
     const isViral = /viral|trending|hook/.test(text);
     const outputType = isImage ? "image" : "video";
-    const batchSize = isImage ? 9 : 3;
+    const batchSize = isImage ? 4 : 4; // Default middle batch sizes
     
     return {
       output_type: outputType,

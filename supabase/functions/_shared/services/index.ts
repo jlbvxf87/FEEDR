@@ -21,7 +21,6 @@ import { ClaudeScriptService } from "./script/claude.ts";
 import { ElevenLabsVoiceService } from "./voice/elevenlabs.ts";
 import { OpenAITTSService } from "./voice/openai-tts.ts";
 import { SoraVideoService } from "./video/sora.ts";
-import { RunwayVideoService } from "./video/runway.ts";
 import { ApifyResearchService } from "./research/apify.ts";
 import { FFmpegAssemblyService } from "./assembly/ffmpeg.ts";
 import { ShotstackAssemblyService } from "./assembly/shotstack.ts";
@@ -37,7 +36,7 @@ export type ServiceType = "script" | "voice" | "video" | "image" | "assembly" | 
 // Available service implementations
 export type ScriptServiceName = "mock" | "openai" | "claude";
 export type VoiceServiceName = "mock" | "elevenlabs" | "openai";
-export type VideoServiceName = "mock" | "sora" | "runway";
+export type VideoServiceName = "mock" | "sora";
 export type ImageServiceName = "mock" | "dalle" | "flux" | "midjourney";
 export type AssemblyServiceName = "mock" | "ffmpeg" | "shotstack";
 export type ResearchServiceName = "mock" | "apify";
@@ -174,8 +173,6 @@ export class ServiceRegistry {
     switch (name) {
       case "sora":
         return new SoraVideoService();
-      case "runway":
-        return new RunwayVideoService();
       case "mock":
       default:
         return new MockVideoService();

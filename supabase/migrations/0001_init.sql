@@ -31,7 +31,7 @@ CREATE TABLE batches (
   intent_text TEXT NOT NULL,
   preset_key TEXT NOT NULL,
   mode TEXT NOT NULL CHECK (mode IN ('hook_test', 'angle_test', 'format_test')),
-  batch_size INTEGER NOT NULL CHECK (batch_size IN (5, 10, 15)),
+  batch_size INTEGER NOT NULL CHECK (batch_size IN (2, 4, 6, 8)),
   status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'done', 'failed')),
   error TEXT NULL
 );

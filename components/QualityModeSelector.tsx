@@ -18,7 +18,7 @@ export function QualityModeSelector({
   batchSize,
   disabled = false,
 }: QualityModeSelectorProps) {
-  const modes: QualityMode[] = ["economy", "balanced", "premium"];
+  const modes: QualityMode[] = ["fast", "good", "better"];
   
   // Calculate costs for each mode
   const costs = modes.map(mode => estimateBatchCost(mode, outputType, batchSize));
@@ -55,7 +55,7 @@ export function QualityModeSelector({
               )}
             >
               {/* Recommended badge */}
-              {mode === "balanced" && (
+              {mode === "good" && (
                 <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-[#2EE6C9] text-[#0B0E11] text-[9px] font-bold uppercase tracking-wider rounded-full">
                   Best Value
                 </span>
@@ -122,7 +122,7 @@ export function QualityModeToggle({
   onSelect: (mode: QualityMode) => void;
   disabled?: boolean;
 }) {
-  const modes: QualityMode[] = ["economy", "balanced", "premium"];
+  const modes: QualityMode[] = ["fast", "good", "better"];
   
   return (
     <div className="flex rounded-lg overflow-hidden border border-[#2D3748]">

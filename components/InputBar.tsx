@@ -22,7 +22,7 @@ export function InputBar({
 }: InputBarProps) {
   const [intentText, setIntentText] = useState("");
   const [mode, setMode] = useState<BatchMode>("hook_test");
-  const [batchSize, setBatchSize] = useState<BatchSize>(15);
+  const [batchSize, setBatchSize] = useState<BatchSize>(4);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,9 +83,10 @@ export function InputBar({
               "cursor-pointer transition-all duration-150"
             )}
           >
-            <option value={5}>5</option>
-            <option value={10}>10</option>
-            <option value={15}>15</option>
+            <option value={2}>2</option>
+            <option value={4}>4</option>
+            <option value={6}>6</option>
+            <option value={8}>8</option>
           </select>
         </div>
 

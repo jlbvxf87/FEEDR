@@ -10,7 +10,7 @@ export type PresetKey =
   | "MINIMAL_V1";
 
 export type BatchMode = "hook_test" | "angle_test" | "format_test";
-export type BatchSize = 5 | 10 | 15;
+export type BatchSize = 2 | 4 | 6 | 8;
 export type BatchStatus = "queued" | "running" | "done" | "failed";
 export type OutputType = "video" | "image";
 export type ImageType = "product" | "lifestyle" | "ad" | "ugc" | "hero" | "custom";
@@ -63,6 +63,9 @@ export interface Preset {
   created_at: string;
 }
 
+export type PaymentStatus = "pending" | "charged" | "failed" | "refunded" | "free";
+export type QualityMode = "fast" | "good" | "better";
+
 export interface Batch {
   id: string;
   created_at: string;
@@ -74,6 +77,12 @@ export interface Batch {
   status: BatchStatus;
   output_type: OutputType;
   error: string | null;
+  // Billing fields
+  user_id: string | null;
+  quality_mode: QualityMode;
+  base_cost_cents: number;
+  user_charge_cents: number;
+  payment_status: PaymentStatus;
 }
 
 export interface OnScreenText {

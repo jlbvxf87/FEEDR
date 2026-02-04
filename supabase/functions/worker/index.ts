@@ -556,12 +556,24 @@ async function checkBatchCompletion(supabase: any, batchId: string) {
   const anyFailed = clips.some((c: any) => c.status === "failed");
 
   if (allReady || anyFailed) {
+    const newStatus = anyFailed ? "failed" : "done";
+    
     await supabase
       .from("batches")
       .update({ 
-        status: anyFailed ? "failed" : "done",
+        status: newStatus,
         updated_at: new Date().toISOString()
       })
       .eq("id", batchId);
+    
+    // If batch failed, refund user credits
+    if (anyFailed) {
+      try {
+        await supabase.rpc("refund_batch", { p_batch_id: batchId });
+        console.log(`Refunded credits for failed batch ${batchId}`);
+      } catch (refundError) {
+        console.error(`Failed to refund batch ${batchId}:`, refundError);
+      }
+    }
   }
 }

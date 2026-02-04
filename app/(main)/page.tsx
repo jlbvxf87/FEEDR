@@ -45,12 +45,13 @@ function FeedPageContent() {
   
   // Output type & batch size
   const [outputType, setOutputType] = useState<OutputType>("video");
-  const [videoBatchSize, setVideoBatchSize] = useState<1 | 3 | 5>(3);
+  const [videoBatchSize, setVideoBatchSize] = useState<2 | 4 | 6>(4);
+  const [imageBatchSize, setImageBatchSize] = useState<2 | 4 | 8>(4);
   const [imagePack, setImagePack] = useState<ImagePack>("auto");
   const [showImagePacks, setShowImagePacks] = useState(false);
   
   // Quality mode - user controls which models to use
-  const [qualityMode, setQualityMode] = useState<QualityMode>("balanced");
+  const [qualityMode, setQualityMode] = useState<QualityMode>("good");
   
   // Cost tracking
   const [totalSpent, setTotalSpent] = useState(0);
@@ -60,7 +61,7 @@ function FeedPageContent() {
 
   // Calculate estimated cost based on current settings
   const estimatedCost = useMemo(() => {
-    const batchSize = outputType === "image" ? 9 : videoBatchSize;
+    const batchSize = outputType === "image" ? imageBatchSize : videoBatchSize;
     const estimate = estimateBatchCost(qualityMode, outputType, batchSize);
     return {
       ...estimate,
@@ -68,7 +69,7 @@ function FeedPageContent() {
       modeLabel: QUALITY_TIERS[qualityMode].label,
       batchSize,
     };
-  }, [qualityMode, outputType, videoBatchSize]);
+  }, [qualityMode, outputType, videoBatchSize, imageBatchSize]);
 
   // Load initial data
   useEffect(() => {
@@ -173,7 +174,7 @@ function FeedPageContent() {
 
     try {
       const mode: BatchMode = "hook_test";
-      const batchSize = outputType === "image" ? 9 : videoBatchSize;
+      const batchSize = outputType === "image" ? imageBatchSize : videoBatchSize;
       
       const imagePrompts = outputType === "image" 
         ? generateImagePrompts(intentText.trim(), imagePack)
@@ -193,9 +194,15 @@ function FeedPageContent() {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Check for insufficient credits error
+        if (error.message?.includes("Insufficient credits")) {
+          throw new Error("Not enough credits. Please add more credits to continue.");
+        }
+        throw error;
+      }
 
-      // Update session cost
+      // Update session cost (user was charged)
       setSessionCost(prev => prev + estimatedCost.totalCents);
       setTotalSpent(prev => prev + estimatedCost.totalCents);
 
@@ -348,7 +355,7 @@ function FeedPageContent() {
               </span>
               {outputType === "video" ? (
                 <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
-                  {([1, 3, 5] as const).map((size) => (
+                  {([2, 4, 6] as const).map((size) => (
                     <button
                       key={size}
                       onClick={() => setVideoBatchSize(size)}
@@ -365,7 +372,23 @@ function FeedPageContent() {
                   ))}
                 </div>
               ) : (
-                <span className="text-sm text-white font-medium bg-[#0B0E11] px-4 py-2 rounded-full">9</span>
+                <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
+                  {([2, 4, 8] as const).map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => setImageBatchSize(size)}
+                      disabled={isGenerating || isRunning}
+                      className={cn(
+                        "w-10 h-8 rounded-full text-sm font-semibold transition-all",
+                        imageBatchSize === size
+                          ? "bg-[#2EE6C9] text-[#0B0E11]"
+                          : "text-[#6B7A8F] hover:text-white"
+                      )}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
 
@@ -373,7 +396,7 @@ function FeedPageContent() {
             <div className="flex items-center justify-between">
               <span className="text-xs text-[#6B7A8F]">Quality</span>
               <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
-                {(["economy", "balanced", "premium"] as const).map((mode) => (
+                {(["fast", "good", "better"] as const).map((mode) => (
                   <button
                     key={mode}
                     onClick={() => setQualityMode(mode)}
@@ -381,15 +404,15 @@ function FeedPageContent() {
                     className={cn(
                       "px-4 h-8 rounded-full text-sm font-semibold transition-all",
                       qualityMode === mode
-                        ? mode === "economy" 
+                        ? mode === "fast" 
                           ? "bg-[#F59E0B] text-[#0B0E11]"
-                          : mode === "balanced"
+                          : mode === "good"
                             ? "bg-[#2EE6C9] text-[#0B0E11]"
                             : "bg-[#A855F7] text-white"
                         : "text-[#6B7A8F] hover:text-white"
                     )}
                   >
-                    {mode === "economy" ? "Fast" : mode === "balanced" ? "Good" : "Best"}
+                    {mode === "fast" ? "Fast" : mode === "good" ? "Good" : "Better"}
                   </button>
                 ))}
               </div>
@@ -422,24 +445,27 @@ function FeedPageContent() {
                     <div className="flex justify-between">
                       <span className="text-[#6B7A8F]">Script</span>
                       <span className="text-white font-medium">
-                        {qualityMode === "economy" ? "GPT-4o Mini" : qualityMode === "balanced" ? "Claude Haiku" : "Claude Sonnet"}
+                        {qualityMode === "fast" ? "GPT-4o Mini" : qualityMode === "good" ? "Claude Haiku" : "Claude Sonnet"}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-[#6B7A8F]">Voice</span>
                       <span className="text-white font-medium">
-                        {qualityMode === "economy" ? "Basic TTS" : qualityMode === "balanced" ? "ElevenLabs" : "ElevenLabs HD"}
+                        {qualityMode === "fast" ? "Basic TTS" : qualityMode === "good" ? "ElevenLabs" : "ElevenLabs HD"}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#6B7A8F]">Video</span>
+                      <span className="text-[#6B7A8F]">{outputType === "video" ? "Video" : "Image"}</span>
                       <span className="text-white font-medium">
-                        {qualityMode === "economy" ? "Fast Gen" : qualityMode === "balanced" ? "Runway Gen3" : "Sora"}
+                        {outputType === "video" 
+                          ? "Sora"
+                          : (qualityMode === "fast" ? "DALL-E 2" : qualityMode === "good" ? "DALL-E 3" : "DALL-E 3 HD")
+                        }
                       </span>
                     </div>
                   </div>
                   <div className="mt-3 pt-2 border-t border-[#2A3441] text-[10px] text-[#4B5563]">
-                    {outputType === "video" ? videoBatchSize : 9} {outputType}{(outputType === "video" ? videoBatchSize : 9) > 1 ? 's' : ''} × {qualityMode} tier
+                    {outputType === "video" ? videoBatchSize : imageBatchSize} {outputType}{(outputType === "video" ? videoBatchSize : imageBatchSize) > 1 ? 's' : ''} × {qualityMode} tier
                   </div>
                   {/* Arrow */}
                   <div className="absolute top-full left-6 border-8 border-transparent border-t-[#1C2230]" />
@@ -558,7 +584,7 @@ function FeedPageContent() {
               Describe what you want to create
             </p>
             <p className="text-[#4B5563] text-xs">
-              AI generates {outputType === "video" ? "3 video" : "9 image"} variations
+              AI generates {outputType === "video" ? `${videoBatchSize} video` : `${imageBatchSize} image`} variations
             </p>
           </section>
         )}

@@ -72,8 +72,8 @@ export const INTENT_PARSING_PROMPT = `You are the intelligent orchestrator for F
 Parse user input and determine: output type (video/image), content type, preset, and whether research is needed.
 
 Consider prompt complexity:
-- Simple prompts (few words, basic requests) → suggest economy mode
-- Moderate prompts (specific requirements) → suggest balanced mode  
-- Complex prompts (creative, technical, professional) → suggest premium mode
+- Simple prompts (few words, basic requests) → suggest fast mode
+- Moderate prompts (specific requirements) → suggest good mode  
+- Complex prompts (creative, technical, professional) → suggest better mode
 
 Return JSON with: output_type, content_type, product_name, recommended_preset, needs_research, image_pack (for images), confidence, reasoning.`;
