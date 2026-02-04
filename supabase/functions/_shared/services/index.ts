@@ -24,6 +24,7 @@ import { SoraVideoService } from "./video/sora.ts";
 import { RunwayVideoService } from "./video/runway.ts";
 import { ApifyResearchService } from "./research/apify.ts";
 import { FFmpegAssemblyService } from "./assembly/ffmpeg.ts";
+import { ShotstackAssemblyService } from "./assembly/shotstack.ts";
 
 // Import image implementations
 import { MockImageService } from "./image/mock.ts";
@@ -38,7 +39,7 @@ export type ScriptServiceName = "mock" | "openai" | "claude";
 export type VoiceServiceName = "mock" | "elevenlabs" | "openai";
 export type VideoServiceName = "mock" | "sora" | "runway";
 export type ImageServiceName = "mock" | "dalle" | "flux" | "midjourney";
-export type AssemblyServiceName = "mock" | "ffmpeg";
+export type AssemblyServiceName = "mock" | "ffmpeg" | "shotstack";
 export type ResearchServiceName = "mock" | "apify";
 
 /**
@@ -201,6 +202,8 @@ export class ServiceRegistry {
     switch (name) {
       case "ffmpeg":
         return new FFmpegAssemblyService();
+      case "shotstack":
+        return new ShotstackAssemblyService();
       case "mock":
       default:
         return new MockAssemblyService();
