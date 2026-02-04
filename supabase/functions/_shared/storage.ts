@@ -3,7 +3,8 @@
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
-export type StorageBucket = "assets" | "voice" | "raw" | "final" | "previews";
+// Bucket names must match exactly what's in Supabase Storage (case-sensitive)
+export type StorageBucket = "images" | "Voice" | "raw" | "final";
 
 export interface UploadResult {
   path: string;
@@ -70,7 +71,7 @@ export async function uploadAudio(
   audioData: ArrayBuffer | Blob
 ): Promise<string> {
   const path = `${clipId}.mp3`;
-  const result = await uploadToStorage("voice", path, audioData, "audio/mpeg");
+  const result = await uploadToStorage("Voice", path, audioData, "audio/mpeg");
   return result.publicUrl;
 }
 
