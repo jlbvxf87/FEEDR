@@ -84,18 +84,38 @@ serve(async (req) => {
     }
     
     // Only check for stuck jobs every 30 minutes (on minutes 0, 30)
-    // Real API calls (especially video) can take 5-10+ minutes
+    // Real API calls (especially video) can take 10-15+ minutes
     if (currentMinute === 0 || currentMinute === 30) {
-      const stuckThreshold = new Date(Date.now() - 15 * 60 * 1000).toISOString(); // 15 minutes
-      const { data: stuckJobs } = await supabase
-        .from("jobs")
-        .update({ status: "queued", error: "Reset: stuck job (>15min)" })
-        .eq("status", "running")
-        .lt("created_at", stuckThreshold)
-        .select("id");
+      const STUCK_THRESHOLD_MINUTES = 20; // Increased to 20 minutes for slow video APIs
       
-      if (stuckJobs && stuckJobs.length > 0) {
-        console.log(`Reset ${stuckJobs.length} stuck jobs (>15min old)`);
+      // Try using the RPC function first (more reliable)
+      const { data: resetCount, error: rpcError } = await supabase.rpc("reset_stuck_jobs", {
+        p_threshold_minutes: STUCK_THRESHOLD_MINUTES,
+      });
+      
+      if (rpcError) {
+        // Fallback to direct update if RPC not available
+        console.warn("reset_stuck_jobs RPC not available, using legacy method:", rpcError.message);
+        
+        // FIX: Use updated_at instead of created_at
+        // A job created 25 min ago but started 5 min ago should NOT be reset
+        const stuckThreshold = new Date(Date.now() - STUCK_THRESHOLD_MINUTES * 60 * 1000).toISOString();
+        const { data: stuckJobs } = await supabase
+          .from("jobs")
+          .update({ 
+            status: "queued", 
+            error: `Reset: stuck job (>${STUCK_THRESHOLD_MINUTES}min)`,
+            locked_at: null  // Clear lock if column exists
+          })
+          .eq("status", "running")
+          .lt("updated_at", stuckThreshold)  // FIXED: was created_at
+          .select("id");
+        
+        if (stuckJobs && stuckJobs.length > 0) {
+          console.log(`Reset ${stuckJobs.length} stuck jobs (>${STUCK_THRESHOLD_MINUTES}min since last update)`);
+        }
+      } else if (resetCount && resetCount > 0) {
+        console.log(`Reset ${resetCount} stuck jobs via RPC (>${STUCK_THRESHOLD_MINUTES}min threshold)`);
       }
     }
 

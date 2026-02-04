@@ -602,5 +602,183 @@ CREATE POLICY "Service role full access to credit_transactions" ON credit_transa
 CREATE POLICY "Authenticated users can read pricing" ON pricing_config FOR SELECT USING (auth.role() = 'authenticated' OR auth.role() = 'service_role');
 
 -- ============================================
+-- 0009: ROBUST QUEUE SYSTEM
+-- ============================================
+
+-- Add locked_at column for distributed locking
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ NULL;
+
+-- Create index for efficient queue queries
+CREATE INDEX IF NOT EXISTS idx_jobs_queue_priority 
+ON jobs(status, created_at) 
+WHERE status = 'queued';
+
+-- ATOMIC JOB CLAIMING FUNCTION
+-- Uses FOR UPDATE SKIP LOCKED to prevent race conditions
+CREATE OR REPLACE FUNCTION claim_next_job()
+RETURNS TABLE (
+  job_id UUID,
+  job_type TEXT,
+  job_batch_id UUID,
+  job_clip_id UUID,
+  job_payload JSONB,
+  job_attempts INT,
+  job_error TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_job RECORD;
+BEGIN
+  SELECT * INTO v_job
+  FROM jobs
+  WHERE status = 'queued'
+  ORDER BY created_at ASC
+  LIMIT 1
+  FOR UPDATE SKIP LOCKED;
+  
+  IF v_job IS NULL THEN
+    RETURN;
+  END IF;
+  
+  UPDATE jobs SET 
+    status = 'running',
+    attempts = v_job.attempts + 1,
+    updated_at = now(),
+    locked_at = now(),
+    error = NULL
+  WHERE id = v_job.id;
+  
+  RETURN QUERY SELECT 
+    v_job.id,
+    v_job.type,
+    v_job.batch_id,
+    v_job.clip_id,
+    v_job.payload_json,
+    v_job.attempts + 1,
+    v_job.error;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION claim_next_job() TO service_role;
+
+-- IDEMPOTENT CHILD JOB CREATION FUNCTION
+CREATE OR REPLACE FUNCTION create_child_job_if_not_exists(
+  p_batch_id UUID,
+  p_clip_id UUID,
+  p_type TEXT,
+  p_payload JSONB DEFAULT '{}'::JSONB
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_existing_id UUID;
+  v_new_id UUID;
+BEGIN
+  IF p_clip_id IS NOT NULL THEN
+    SELECT id INTO v_existing_id
+    FROM jobs
+    WHERE clip_id = p_clip_id
+      AND type = p_type
+      AND status != 'failed'
+    LIMIT 1;
+  ELSE
+    SELECT id INTO v_existing_id
+    FROM jobs
+    WHERE batch_id = p_batch_id
+      AND clip_id IS NULL
+      AND type = p_type
+      AND status != 'failed'
+    LIMIT 1;
+  END IF;
+  
+  IF v_existing_id IS NOT NULL THEN
+    RETURN v_existing_id;
+  END IF;
+  
+  INSERT INTO jobs (batch_id, clip_id, type, status, payload_json, attempts)
+  VALUES (p_batch_id, p_clip_id, p_type, 'queued', p_payload, 0)
+  RETURNING id INTO v_new_id;
+  
+  RETURN v_new_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION create_child_job_if_not_exists(UUID, UUID, TEXT, JSONB) TO service_role;
+
+-- JOB COMPLETION HELPER
+CREATE OR REPLACE FUNCTION complete_job(
+  p_job_id UUID,
+  p_status TEXT DEFAULT 'done',
+  p_error TEXT DEFAULT NULL
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE jobs SET
+    status = p_status,
+    error = p_error,
+    updated_at = now(),
+    locked_at = NULL
+  WHERE id = p_job_id;
+  
+  RETURN FOUND;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION complete_job(UUID, TEXT, TEXT) TO service_role;
+
+-- HEARTBEAT FUNCTION FOR LONG-RUNNING JOBS
+CREATE OR REPLACE FUNCTION job_heartbeat(p_job_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE jobs SET
+    updated_at = now(),
+    locked_at = now()
+  WHERE id = p_job_id
+    AND status = 'running';
+  
+  RETURN FOUND;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION job_heartbeat(UUID) TO service_role;
+
+-- RESET STUCK JOBS FUNCTION
+CREATE OR REPLACE FUNCTION reset_stuck_jobs(p_threshold_minutes INT DEFAULT 20)
+RETURNS INT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_count INT;
+BEGIN
+  WITH stuck AS (
+    UPDATE jobs SET
+      status = 'queued',
+      error = 'Reset: job exceeded ' || p_threshold_minutes || ' minute threshold',
+      locked_at = NULL,
+      updated_at = now()
+    WHERE status = 'running'
+      AND updated_at < now() - (p_threshold_minutes || ' minutes')::INTERVAL
+    RETURNING id
+  )
+  SELECT COUNT(*) INTO v_count FROM stuck;
+  
+  RETURN v_count;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION reset_stuck_jobs(INT) TO service_role;
+
+-- ============================================
 -- DONE! Your database is ready.
 -- ============================================
