@@ -1,5 +1,5 @@
 // FEEDR - Cron Worker Edge Function
-// This function is triggered by a cron job to process queued jobs
+// This function is triggered by a cron job to process queued jobs AND run cleanup
 // Configure in Supabase Dashboard: Database > Extensions > pg_cron
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -16,6 +16,9 @@ const MAX_JOBS_PER_RUN = 10;
 // Maximum time (ms) to process jobs per invocation
 const MAX_RUNTIME_MS = 55000; // 55 seconds (leave buffer for function timeout)
 
+// Run cleanup every N cron executions (e.g., every hour if cron runs every minute)
+const CLEANUP_INTERVAL = 60;
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -25,6 +28,7 @@ serve(async (req) => {
   const startTime = Date.now();
   let processedCount = 0;
   const results: { job_id: string; type: string; status: string }[] = [];
+  let cleanupResult = null;
 
   try {
     // Initialize Supabase client
@@ -60,6 +64,26 @@ serve(async (req) => {
       await new Promise(r => setTimeout(r, 100));
     }
 
+    // Run cleanup periodically (check if we should run based on minute of hour)
+    const currentMinute = new Date().getMinutes();
+    if (currentMinute === 0) {
+      // Run cleanup at the top of each hour
+      try {
+        const { data: cleanupData, error: cleanupError } = await supabase.functions.invoke("cleanup", {
+          body: {},
+        });
+        
+        if (cleanupError) {
+          console.error("Cleanup error:", cleanupError);
+        } else {
+          cleanupResult = cleanupData;
+          console.log("Cleanup completed:", cleanupData);
+        }
+      } catch (e) {
+        console.error("Cleanup invocation failed:", e);
+      }
+    }
+
     const elapsed = Date.now() - startTime;
 
     return new Response(
@@ -68,6 +92,7 @@ serve(async (req) => {
         jobs_processed: processedCount,
         elapsed_ms: elapsed,
         results,
+        cleanup: cleanupResult,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

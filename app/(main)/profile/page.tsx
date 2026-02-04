@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseBrowser";
 import { Header } from "@/components/nav/Header";
+import { StorageDashboard } from "@/components/StorageDashboard";
 import { cn } from "@/lib/utils";
 
 interface UserStats {
@@ -155,19 +156,25 @@ export default function ProfilePage() {
               </div>
             </section>
 
+            {/* Storage & Cleanup Dashboard */}
+            <section>
+              <StorageDashboard />
+            </section>
+
             {/* Service Status */}
             <section>
               <h2 className="text-xs text-[#6B7280] uppercase tracking-wider mb-3">
                 Service Status
               </h2>
               <div className="bg-[#1C2230] rounded-xl p-4 space-y-3">
-                <ServiceStatus name="Script Engine" status="mock" />
-                <ServiceStatus name="Voice Engine" status="mock" />
-                <ServiceStatus name="Video Engine" status="mock" />
-                <ServiceStatus name="Assembly" status="mock" />
+                <ServiceStatus name="Script Engine" status="active" />
+                <ServiceStatus name="Voice Engine" status="active" />
+                <ServiceStatus name="Video Engine" status="active" />
+                <ServiceStatus name="Assembly" status="active" />
+                <ServiceStatus name="Research" status="active" />
               </div>
               <p className="text-xs text-[#6B7280] mt-2 px-1">
-                Services are in development mode. Real AI will be enabled soon.
+                All services are live with real AI providers.
               </p>
             </section>
 
