@@ -125,35 +125,42 @@ function FeedPageContent() {
     return () => clearInterval(pollInterval);
   }, [currentBatch?.id, currentBatch?.status]);
 
+  // OpenClaw intelligence display
+  const [openclawInsight, setOpenclawInsight] = useState<{
+    reasoning: string;
+    confidence: number;
+    needs_research: boolean;
+  } | null>(null);
+
   const handleGenerate = useCallback(async () => {
     if (!intentText.trim() || isGenerating) return;
     
     setIsGenerating(true);
     setError(null);
+    setOpenclawInsight(null);
 
     try {
-      // KISS: Default to hook_test mode and 9 clips
-      const mode: BatchMode = "hook_test";
-      const batchSize: BatchSize = 10;
-      
-      // For images, generate 9 variations based on pack
-      const imagePrompts = outputType === "image" 
-        ? generateImagePrompts(intentText.trim(), imagePack)
-        : undefined;
-      
-      const { data, error } = await supabase.functions.invoke("generate-batch", {
+      // Call OpenClaw orchestrated endpoint - it figures everything out
+      const { data, error } = await supabase.functions.invoke("feed", {
         body: { 
-          intent_text: intentText.trim(), 
-          preset_key: selectedPreset, 
-          mode, 
-          batch_size: outputType === "image" ? 9 : batchSize, // Always 9 for image packs
+          input: intentText.trim(),
+          // Optional overrides if user explicitly selected
           output_type: outputType,
+          preset_key: selectedPreset !== "AUTO" ? selectedPreset : undefined,
           image_pack: outputType === "image" ? imagePack : undefined,
-          image_prompts: imagePrompts,
         },
       });
 
       if (error) throw error;
+
+      // Show OpenClaw's reasoning
+      if (data.intent) {
+        setOpenclawInsight({
+          reasoning: data.intent.reasoning,
+          confidence: data.intent.confidence,
+          needs_research: data.intent.needs_research,
+        });
+      }
 
       const { data: batchData } = await supabase
         .from("batches")
@@ -175,7 +182,7 @@ function FeedPageContent() {
       setError(err instanceof Error ? err.message : "Something broke. Try again.");
       setIsGenerating(false);
     }
-  }, [intentText, selectedPreset, isGenerating]);
+  }, [intentText, selectedPreset, outputType, imagePack, isGenerating]);
 
   const handleRunWorker = useCallback(async () => {
     try {
@@ -404,6 +411,33 @@ function FeedPageContent() {
             </div>
           )}
         </section>
+
+        {/* OpenClaw Insight (when processing) */}
+        {openclawInsight && (
+          <div className="bg-[#1C2230] border border-[#2D3748] rounded-lg p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm">🦞</span>
+              <span className="text-xs font-medium text-[#2EE6C9] uppercase tracking-wider">OpenClaw</span>
+              {openclawInsight.needs_research && (
+                <span className="text-[10px] bg-[#2EE6C9]/10 text-[#2EE6C9] px-2 py-0.5 rounded-full">
+                  Researched Trends
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-[#9CA3AF]">{openclawInsight.reasoning}</p>
+            <div className="mt-2 flex items-center gap-2">
+              <div className="flex-1 h-1 bg-[#2D3748] rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-[#2EE6C9] rounded-full transition-all"
+                  style={{ width: `${openclawInsight.confidence * 100}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-[#6B7280]">
+                {Math.round(openclawInsight.confidence * 100)}% confident
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Results Section */}
         <section>
