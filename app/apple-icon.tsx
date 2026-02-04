@@ -1,5 +1,8 @@
 import { ImageResponse } from "next/og";
 
+// Force Node.js runtime to avoid Edge Runtime __dirname issues
+export const runtime = "nodejs";
+
 export const size = {
   width: 180,
   height: 180,

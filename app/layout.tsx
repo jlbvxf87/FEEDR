@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
+// Force Node.js runtime to avoid Edge Runtime __dirname issues
+export const runtime = "nodejs";
+
 const inter = Inter({ 
   subsets: ["latin"],
   variable: "--font-inter",
