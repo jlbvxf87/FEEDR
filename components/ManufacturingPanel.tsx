@@ -2,11 +2,11 @@
 
 import { cn } from "@/lib/utils";
 import type { Clip, Batch } from "@/lib/types";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 interface ManufacturingPanelProps {
   clips: Clip[];
-  batch: Batch & { estimated_cost?: number };
+  batch: Batch & { estimated_cost?: number; created_at: string };
   recentWinners?: Clip[];
 }
 
@@ -15,7 +15,21 @@ interface Node {
   label: string;
   icon: string;
   status: "pending" | "active" | "complete";
+  estimatedSeconds: number;
 }
+
+// Estimated time in seconds for each step (for user-friendly estimates)
+const STEP_TIMES = {
+  input: 0,
+  brain: 15,
+  script: 10,
+  voice: 12,
+  video: 45,
+  merge: 8,
+  output: 0,
+  prompt: 10,
+  generate: 30,
+};
 
 function getNodes(clips: Clip[], outputType: string): Node[] {
   const statusCounts: Record<string, number> = {
@@ -46,130 +60,87 @@ function getNodes(clips: Clip[], outputType: string): Node[] {
 
   if (outputType === "image") {
     return [
-      { id: "input", label: "Input", icon: "📝", status: "complete" },
-      { id: "brain", label: "Brain", icon: "🧠", status: getStatus(hasStarted, !hasStarted) },
-      { id: "prompt", label: "Prompt", icon: "⚡", status: getStatus(hasScripting, hasStarted && !hasScripting) },
-      { id: "generate", label: "Generate", icon: "🎨", status: getStatus(allReady, hasScripting && !allReady) },
-      { id: "output", label: "Output", icon: "✨", status: getStatus(allReady, false) },
+      { id: "input", label: "Input", icon: "📝", status: "complete", estimatedSeconds: STEP_TIMES.input },
+      { id: "brain", label: "Brain", icon: "🧠", status: getStatus(hasStarted, !hasStarted), estimatedSeconds: STEP_TIMES.brain },
+      { id: "prompt", label: "Prompt", icon: "⚡", status: getStatus(hasScripting, hasStarted && !hasScripting), estimatedSeconds: STEP_TIMES.prompt },
+      { id: "generate", label: "Generate", icon: "🎨", status: getStatus(allReady, hasScripting && !allReady), estimatedSeconds: STEP_TIMES.generate },
+      { id: "output", label: "Output", icon: "✨", status: getStatus(allReady, false), estimatedSeconds: STEP_TIMES.output },
     ];
   }
 
   return [
-    { id: "input", label: "Input", icon: "📝", status: "complete" },
-    { id: "brain", label: "Brain", icon: "🧠", status: getStatus(hasStarted, !hasStarted) },
-    { id: "script", label: "Script", icon: "✍️", status: getStatus(hasVo, hasStarted && statusCounts.scripting > 0) },
-    { id: "voice", label: "Voice", icon: "🎙️", status: getStatus(hasRendering, statusCounts.vo > 0) },
-    { id: "video", label: "Video", icon: "🎬", status: getStatus(hasAssembling, statusCounts.rendering > 0) },
-    { id: "merge", label: "Merge", icon: "🔗", status: getStatus(allReady, statusCounts.assembling > 0) },
-    { id: "output", label: "Output", icon: "✨", status: getStatus(allReady, false) },
+    { id: "input", label: "Input", icon: "📝", status: "complete", estimatedSeconds: STEP_TIMES.input },
+    { id: "brain", label: "Brain", icon: "🧠", status: getStatus(hasStarted, !hasStarted), estimatedSeconds: STEP_TIMES.brain },
+    { id: "script", label: "Script", icon: "✍️", status: getStatus(hasVo, hasStarted && statusCounts.scripting > 0), estimatedSeconds: STEP_TIMES.script },
+    { id: "voice", label: "Voice", icon: "🎙️", status: getStatus(hasRendering, statusCounts.vo > 0), estimatedSeconds: STEP_TIMES.voice },
+    { id: "video", label: "Video", icon: "🎬", status: getStatus(hasAssembling, statusCounts.rendering > 0), estimatedSeconds: STEP_TIMES.video },
+    { id: "merge", label: "Merge", icon: "🔗", status: getStatus(allReady, statusCounts.assembling > 0), estimatedSeconds: STEP_TIMES.merge },
+    { id: "output", label: "Output", icon: "✨", status: getStatus(allReady, false), estimatedSeconds: STEP_TIMES.output },
   ];
 }
 
-// SVG Gear - 12 teeth, spins based on status
-function GearIcon({ status, size = 32 }: { status: Node["status"]; size?: number }) {
-  const teeth = 12;
-  const innerR = size * 0.25;
-  const outerR = size * 0.45;
-  const points: string[] = [];
+// Friendly status messages for each step
+const STATUS_MESSAGES: Record<string, string[]> = {
+  brain: ["Analyzing your idea...", "Crafting unique hooks...", "Generating concepts..."],
+  script: ["Writing your script...", "Optimizing for engagement...", "Adding the magic..."],
+  voice: ["Recording voiceover...", "Adding personality...", "Perfecting the tone..."],
+  video: ["Rendering visuals...", "Creating your content...", "Almost there..."],
+  merge: ["Final assembly...", "Adding finishing touches...", "Polishing..."],
+  prompt: ["Crafting image prompts...", "Optimizing for quality...", "Almost ready..."],
+  generate: ["Generating images...", "Creating variations...", "Rendering..."],
+};
 
-  for (let i = 0; i < teeth * 2; i++) {
-    const r = i % 2 === 0 ? outerR : innerR;
-    const angle = (i * Math.PI) / teeth - Math.PI / 2;
-    const x = size / 2 + r * Math.cos(angle);
-    const y = size / 2 + r * Math.sin(angle);
-    points.push(`${x},${y}`);
-  }
-
-  const pathD = `M ${points.join(" L ")} Z`;
-
+// Clean workflow node - rectangular card style
+function WorkflowNode({ node, index }: { node: Node; index: number }) {
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
-      <defs>
-        <linearGradient id="gearComplete" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#2EE6C9" />
-          <stop offset="100%" stopColor="#1FB6FF" />
-        </linearGradient>
-        <linearGradient id="gearActive" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#0095FF" />
-          <stop offset="100%" stopColor="#2EE6C9" />
-        </linearGradient>
-        <filter id="gearGlow">
-          <feGaussianBlur stdDeviation="2" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
-      <path
-        d={pathD}
-        fill="none"
-        stroke={status === "complete" ? "url(#gearComplete)" : status === "active" ? "url(#gearActive)" : "#2A3241"}
-        strokeWidth={2}
-        strokeLinejoin="round"
-        className={cn(
-          "transition-all duration-500",
-          status === "complete" && "drop-shadow-[0_0_8px_rgba(46,230,201,0.6)]",
-          status === "active" && "drop-shadow-[0_0_8px_rgba(0,149,255,0.6)]"
-        )}
-        style={{
-          animation: status === "active" || status === "complete" ? "gearSpin 2s linear infinite" : "none",
-        }}
-      />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={size * 0.12}
-        fill={status === "complete" ? "#2EE6C9" : status === "active" ? "#0095FF" : "#1A1F2B"}
-        stroke={status === "complete" ? "#2EE6C9" : status === "active" ? "#0095FF" : "#2A3241"}
-        strokeWidth={1.5}
-        className="transition-all duration-500"
-      />
-    </svg>
-  );
-}
-
-// Single gear node
-function GearNode({ node, index }: { node: Node; index: number }) {
-  return (
-    <div className="relative flex flex-col items-center" style={{ animationDelay: `${index * 0.1}s` }}>
+    <div 
+      className="relative flex flex-col items-center"
+      style={{ animationDelay: `${index * 50}ms` }}
+    >
+      {/* Node card */}
       <div
         className={cn(
-          "relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500",
-          "border-2",
-          node.status === "complete" && "border-[#2EE6C9]/50 bg-[#2EE6C9]/10 shadow-[0_0_24px_rgba(46,230,201,0.25)]",
-          node.status === "active" && "border-[#0095FF]/50 bg-[#0095FF]/10 shadow-[0_0_24px_rgba(0,149,255,0.25)]",
-          node.status === "pending" && "border-[#2A3241] bg-[#1A1F2B]/80"
+          "relative w-14 h-14 rounded-xl flex items-center justify-center transition-all duration-300",
+          "border bg-[#1A1F2B]",
+          node.status === "complete" && "border-[#2EE6C9] bg-[#2EE6C9]/10",
+          node.status === "active" && "border-[#0095FF] bg-[#0095FF]/10",
+          node.status === "pending" && "border-[#2A3241]"
         )}
       >
-        {/* Active pulse ring */}
+        {/* Subtle glow for active */}
         {node.status === "active" && (
-          <div className="absolute inset-0 rounded-full border-2 border-[#0095FF]/50 animate-ping opacity-40" />
+          <div className="absolute inset-0 rounded-xl bg-[#0095FF]/20 animate-pulse" />
         )}
 
-        {/* Gear SVG */}
-        <div className="relative z-10">
-          <GearIcon status={node.status} size={36} />
-        </div>
+        {/* Icon */}
+        <span className={cn(
+          "text-xl relative z-10 transition-all duration-300",
+          node.status === "pending" && "opacity-40 grayscale"
+        )}>
+          {node.icon}
+        </span>
 
-        {/* Icon overlay (centered in gear hub) */}
-        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-          <span className="text-lg">{node.icon}</span>
-        </div>
-
-        {/* Checkmark for complete */}
+        {/* Checkmark badge for complete */}
         {node.status === "complete" && (
-          <div className="absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full bg-[#2EE6C9] flex items-center justify-center z-30 shadow-lg">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0B0E11" strokeWidth="3">
+          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#2EE6C9] flex items-center justify-center z-20 shadow-lg shadow-[#2EE6C9]/30">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0B0E11" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12" />
             </svg>
           </div>
         )}
+
+        {/* Processing indicator for active */}
+        {node.status === "active" && (
+          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#0095FF] flex items-center justify-center z-20 shadow-lg shadow-[#0095FF]/30">
+            <div className="w-2.5 h-2.5 border-[1.5px] border-white border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
       </div>
 
+      {/* Label */}
       <span
         className={cn(
-          "mt-2 text-xs font-medium transition-colors",
+          "mt-2 text-[11px] font-medium tracking-wide transition-colors duration-300",
           node.status === "complete" && "text-[#2EE6C9]",
           node.status === "active" && "text-white",
           node.status === "pending" && "text-[#4B5563]"
@@ -181,86 +152,40 @@ function GearNode({ node, index }: { node: Node; index: number }) {
   );
 }
 
-// Connecting line with animated flow based on completion
-function GearConnection({ from, to, index }: { from: Node; to: Node; index: number }) {
-  const isComplete = from.status === "complete" && to.status === "complete";
+// Clean connection line between nodes
+function NodeConnection({ from, to }: { from: Node; to: Node }) {
+  const isComplete = from.status === "complete" && to.status !== "pending";
   const isActive = from.status === "complete" && to.status === "active";
-  const isPending = !isComplete && !isActive;
+  const isPending = from.status !== "complete";
 
   return (
-    <div className="relative flex-1 h-20 flex items-center mx-0.5 min-w-[24px]">
-      {/* Connection line with gradient */}
-      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id={`lineGrad-${index}`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#2EE6C9" />
-            <stop offset="50%" stopColor="#0095FF" />
-            <stop offset="100%" stopColor="#2EE6C9" />
-          </linearGradient>
-          <linearGradient id={`lineActive-${index}`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#2EE6C9" />
-            <stop offset="100%" stopColor="#0095FF" />
-          </linearGradient>
-        </defs>
-        {/* Base track */}
-        <line
-          x1="0"
-          y1="50"
-          x2="100"
-          y2="50"
-          stroke={isPending ? "#2A3241" : isComplete ? `url(#lineGrad-${index})` : `url(#lineActive-${index})`}
-          strokeWidth="3"
-          strokeLinecap="round"
-          className="transition-all duration-500"
+    <div className="relative flex items-center mx-1 h-14">
+      <div className="relative w-8 h-[2px]">
+        <div 
+          className={cn(
+            "absolute inset-0 rounded-full transition-all duration-500",
+            isPending && "bg-[#2A3241]",
+            isComplete && !isActive && "bg-gradient-to-r from-[#2EE6C9] to-[#2EE6C9]",
+            isActive && "bg-gradient-to-r from-[#2EE6C9] to-[#0095FF]"
+          )}
         />
-        {/* Glow for active/complete */}
-        {(isActive || isComplete) && (
-          <line
-            x1="0"
-            y1="50"
-            x2="100"
-            y2="50"
-            stroke={isComplete ? "#2EE6C9" : "#0095FF"}
-            strokeWidth="6"
-            strokeLinecap="round"
-            opacity="0.2"
-            className="transition-all duration-500"
+        
+        {isActive && (
+          <div 
+            className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_6px_#0095FF]"
+            style={{ animation: "flowDot 1s ease-in-out infinite" }}
           />
         )}
-      </svg>
-
-      {/* Animated flow particles */}
-      {(isActive || isComplete) && (
-        <div className="absolute inset-0 overflow-hidden">
-          {[0, 0.25, 0.5, 0.75].map((delay) => (
-            <div
-              key={delay}
-              className="absolute w-2 h-2 rounded-full bg-[#2EE6C9] shadow-[0_0_8px_#2EE6C9]"
-              style={{
-                top: "50%",
-                marginTop: -4,
-                animation: "gearFlow 1.2s ease-in-out infinite",
-                animationDelay: `${delay}s`,
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Small gear teeth accent on the line */}
-      {isComplete && (
-        <div
-          className="absolute top-1/2 left-1/2 w-3 h-3 -translate-x-1/2 -translate-y-1/2 opacity-60"
-          style={{ animation: "gearSpin 1.5s linear infinite" }}
-        >
-          <svg viewBox="0 0 12 12" className="w-full h-full">
-            <path
-              d="M6 1 L7 3 L9 3 L7.5 4.5 L8 6 L6 5 L4 6 L4.5 4.5 L3 3 L5 3 Z"
-              fill="#2EE6C9"
-            />
-          </svg>
-        </div>
-      )}
+        
+        {isComplete && (
+          <div 
+            className={cn(
+              "absolute inset-0 rounded-full blur-sm opacity-50",
+              isActive ? "bg-[#0095FF]" : "bg-[#2EE6C9]"
+            )}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -268,6 +193,13 @@ function GearConnection({ from, to, index }: { from: Node; to: Node; index: numb
 function formatCost(cents: number): string {
   if (cents < 100) return `${cents}¢`;
   return `$${(cents / 100).toFixed(2)}`;
+}
+
+function formatTime(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
 
 export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
@@ -278,64 +210,140 @@ export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
   const totalCount = clips.length;
   const allDone = readyCount === totalCount && totalCount > 0;
   const activeNode = nodes.find((n) => n.status === "active");
+  const completedSteps = nodes.filter((n) => n.status === "complete").length;
+
+  // Elapsed time tracker
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [statusMessage, setStatusMessage] = useState("");
+
+  useEffect(() => {
+    if (allDone) return;
+    
+    const startTime = new Date(batch.created_at).getTime();
+    
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setElapsedSeconds(Math.floor((now - startTime) / 1000));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [batch.created_at, allDone]);
+
+  // Rotate status messages for active step
+  useEffect(() => {
+    if (!activeNode || allDone) return;
+    
+    const messages = STATUS_MESSAGES[activeNode.id] || ["Processing..."];
+    let index = 0;
+    setStatusMessage(messages[0]);
+    
+    const interval = setInterval(() => {
+      index = (index + 1) % messages.length;
+      setStatusMessage(messages[index]);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [activeNode?.id, allDone]);
+
+  // Calculate estimated remaining time
+  const estimatedRemaining = useMemo(() => {
+    if (allDone) return 0;
+    const activeIndex = nodes.findIndex((n) => n.status === "active");
+    if (activeIndex === -1) return 0;
+    
+    let remaining = 0;
+    for (let i = activeIndex; i < nodes.length; i++) {
+      remaining += nodes[i].estimatedSeconds * totalCount;
+    }
+    return Math.max(0, remaining);
+  }, [nodes, allDone, totalCount]);
+
+  // Progress percentage
+  const progress = useMemo(() => {
+    if (allDone) return 100;
+    const totalSteps = nodes.length;
+    return Math.round((completedSteps / totalSteps) * 100);
+  }, [nodes.length, completedSteps, allDone]);
 
   return (
     <div className="bg-[#0B0E11] border border-[#1C2230] rounded-2xl overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-[#1C2230] flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {allDone ? (
-            <div className="w-10 h-10 rounded-xl bg-[#2EE6C9]/20 flex items-center justify-center">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2EE6C9" strokeWidth="2">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
+      <div className="px-5 py-4 border-b border-[#1C2230]">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            {allDone ? (
+              <div className="w-10 h-10 rounded-xl bg-[#2EE6C9]/20 flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2EE6C9" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-[#0095FF]/10 border border-[#0095FF]/30 flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-[#0095FF] border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            <div>
+              <h3 className="text-sm font-semibold text-white">
+                {allDone ? "Complete!" : statusMessage || activeNode?.label || "Processing"}
+              </h3>
+              <p className="text-xs text-[#6B7A8F]">
+                {allDone 
+                  ? `${readyCount} ${outputType}s ready in ${formatTime(elapsedSeconds)}`
+                  : `Step ${completedSteps} of ${nodes.length}`
+                }
+              </p>
             </div>
-          ) : (
-            <div className="w-10 h-10 rounded-xl bg-[#0095FF]/10 flex items-center justify-center">
-              <div className="w-5 h-5 border-2 border-[#0095FF] border-t-transparent rounded-full animate-spin" />
+          </div>
+          <div className="text-right">
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl font-bold text-white">{readyCount}</span>
+              <span className="text-sm text-[#4B5563]">/{totalCount}</span>
             </div>
-          )}
-          <div>
-            <h3 className="text-sm font-semibold text-white">
-              {allDone ? "Complete" : activeNode?.label || "Processing"}
-            </h3>
-            <p className="text-xs text-[#6B7A8F]">
-              {allDone ? `${readyCount} ${outputType}s ready` : `Step ${nodes.filter((n) => n.status === "complete").length} of ${nodes.length}`}
-            </p>
+            {!allDone && estimatedRemaining > 0 && (
+              <p className="text-xs text-[#6B7A8F]">~{formatTime(estimatedRemaining)} left</p>
+            )}
+            {estimatedCost > 0 && allDone && (
+              <p className="text-xs text-[#2EE6C9] font-medium">{formatCost(estimatedCost)}</p>
+            )}
           </div>
         </div>
-        <div className="text-right">
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-white">{readyCount}</span>
-            <span className="text-sm text-[#4B5563]">/{totalCount}</span>
+
+        {/* Progress bar */}
+        {!allDone && (
+          <div className="h-1 bg-[#1C2230] rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-[#2EE6C9] to-[#0095FF] rounded-full transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
           </div>
-          {estimatedCost > 0 && (
-            <p className="text-xs text-[#2EE6C9] font-medium">{formatCost(estimatedCost)}</p>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* Gear assembly */}
+      {/* Workflow visualization */}
       <div className="p-6 overflow-x-auto">
-        <div className="flex items-center justify-center min-w-max gap-0">
+        <div className="flex items-center justify-center min-w-max">
           {nodes.map((node, index) => (
             <div key={node.id} className="flex items-center">
-              <GearNode node={node} index={index} />
+              <WorkflowNode node={node} index={index} />
               {index < nodes.length - 1 && (
-                <GearConnection from={node} to={nodes[index + 1]} index={index} />
+                <NodeConnection from={node} to={nodes[index + 1]} />
               )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Prompt */}
-      <div className="px-5 py-3 border-t border-[#1C2230] bg-[#0F1318]">
-        <p className="text-xs text-[#6B7A8F] truncate">
+      {/* Footer with prompt and elapsed time */}
+      <div className="px-5 py-3 border-t border-[#1C2230] bg-[#0F1318] flex items-center justify-between">
+        <p className="text-xs text-[#6B7A8F] truncate flex-1 mr-4">
           <span className="text-[#4B5563]">Prompt:</span> {batch.intent_text}
         </p>
+        {!allDone && elapsedSeconds > 0 && (
+          <span className="text-xs text-[#4B5563] whitespace-nowrap">
+            {formatTime(elapsedSeconds)} elapsed
+          </span>
+        )}
       </div>
-
     </div>
   );
 }

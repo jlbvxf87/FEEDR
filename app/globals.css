@@ -288,17 +288,32 @@
   animation: clipArrive var(--feedr-duration-slow) var(--feedr-easing-snap) forwards;
 }
 
-/* Manufacturing gears */
-@keyframes gearSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+/* Workflow node connection animation */
+@keyframes flowDot {
+  0% { 
+    left: 0%; 
+    opacity: 0;
+  }
+  10% { 
+    opacity: 1;
+  }
+  90% { 
+    opacity: 1;
+  }
+  100% { 
+    left: calc(100% - 6px); 
+    opacity: 0;
+  }
 }
 
-@keyframes gearFlow {
-  0% { left: 0%; opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { left: 100%; opacity: 0; }
+/* Subtle pulse for active nodes */
+@keyframes nodePulse {
+  0%, 100% { 
+    box-shadow: 0 0 0 0 rgba(0, 149, 255, 0.4);
+  }
+  50% { 
+    box-shadow: 0 0 0 4px rgba(0, 149, 255, 0);
+  }
 }
 
 /* ============================================

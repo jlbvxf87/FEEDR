@@ -64,10 +64,9 @@ serve(async (req) => {
       await new Promise(r => setTimeout(r, 100));
     }
 
-    // Run cleanup periodically (check if we should run based on minute of hour)
+    // Run cleanup every 10 minutes (on minutes 0, 10, 20, 30, 40, 50)
     const currentMinute = new Date().getMinutes();
-    if (currentMinute === 0) {
-      // Run cleanup at the top of each hour
+    if (currentMinute % 10 === 0) {
       try {
         const { data: cleanupData, error: cleanupError } = await supabase.functions.invoke("cleanup", {
           body: {},
@@ -82,6 +81,19 @@ serve(async (req) => {
       } catch (e) {
         console.error("Cleanup invocation failed:", e);
       }
+    }
+    
+    // Quick stuck job check on every run (lightweight)
+    const stuckThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: stuckJobs } = await supabase
+      .from("jobs")
+      .update({ status: "queued", error: "Reset: stuck job" })
+      .eq("status", "running")
+      .lt("created_at", stuckThreshold)
+      .select("id");
+    
+    if (stuckJobs && stuckJobs.length > 0) {
+      console.log(`Reset ${stuckJobs.length} stuck jobs`);
     }
 
     const elapsed = Date.now() - startTime;

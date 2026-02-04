@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS presets (
 CREATE TABLE IF NOT EXISTS batches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   intent_text TEXT NOT NULL,
   preset_key TEXT NOT NULL,
   mode TEXT NOT NULL CHECK (mode IN ('hook_test', 'angle_test', 'format_test')),
@@ -32,6 +33,9 @@ CREATE TABLE IF NOT EXISTS batches (
   status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'done', 'failed')),
   error TEXT NULL
 );
+
+-- Add updated_at if it doesn't exist (for existing databases)
+ALTER TABLE batches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_batches_created_at ON batches(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_batches_status ON batches(status);
@@ -65,6 +69,7 @@ CREATE INDEX IF NOT EXISTS idx_clips_winners ON clips(winner) WHERE winner = tru
 CREATE TABLE IF NOT EXISTS jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
   clip_id UUID NULL REFERENCES clips(id) ON DELETE CASCADE,
   type TEXT NOT NULL CHECK (type IN ('compile', 'tts', 'video', 'assemble', 'image', 'image_compile')),
@@ -73,6 +78,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   attempts INTEGER NOT NULL DEFAULT 0,
   error TEXT NULL
 );
+
+-- Add updated_at if it doesn't exist (for existing databases)
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_jobs_status_created ON jobs(status, created_at) WHERE status = 'queued';
 CREATE INDEX IF NOT EXISTS idx_jobs_batch_id ON jobs(batch_id);

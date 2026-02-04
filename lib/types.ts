@@ -66,6 +66,7 @@ export interface Preset {
 export interface Batch {
   id: string;
   created_at: string;
+  updated_at: string;
   intent_text: string;
   preset_key: string;
   mode: BatchMode;
@@ -108,6 +109,7 @@ export interface Clip {
 export interface Job {
   id: string;
   created_at: string;
+  updated_at: string;
   batch_id: string;
   clip_id: string | null;
   type: JobType;
