@@ -1,8 +1,9 @@
-// FEEDR - Main Feed Endpoint (OpenClaw Orchestrated)
+// FEEDR - Main Feed Endpoint (Smart Brain)
+// Uses Claude API to understand intent and orchestrate generation
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { OpenClawOrchestrator } from "../_shared/services/orchestrator/openclaw.ts";
+import { FeedrBrain } from "../_shared/services/orchestrator/openclaw.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,10 +38,10 @@ serve(async (req) => {
       user_id = user?.id;
     }
 
-    const openclaw = new OpenClawOrchestrator();
+    const brain = new FeedrBrain();
 
     // Parse intent
-    const intent = await openclaw.parseIntent({
+    const intent = await brain.parseIntent({
       raw_input: body.input,
       user_id: user_id || "anonymous",
     });
@@ -51,11 +52,11 @@ serve(async (req) => {
     if (body.image_pack) intent.image_pack = body.image_pack;
 
     // Get learning context & create plan
-    const context = await openclaw.getLearningContext(user_id || "anonymous");
-    const plan = await openclaw.createPlan(intent, context);
+    const context = await brain.getLearningContext(user_id || "anonymous");
+    const plan = await brain.createPlan(intent, context);
 
     // Execute
-    const result = await openclaw.execute(plan);
+    const result = await brain.execute(plan);
 
     return new Response(JSON.stringify({
       batch_id: result.batch_id,

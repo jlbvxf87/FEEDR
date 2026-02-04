@@ -1,4 +1,5 @@
-// FEEDR - OpenClaw Orchestrator Implementation
+// FEEDR - Smart Orchestrator (Claude-powered brain)
+// This uses Claude API directly to parse intent and make decisions
 
 import {
   OrchestratorService,
@@ -9,8 +10,8 @@ import {
   INTENT_PARSING_PROMPT,
 } from "./interface.ts";
 
-export class OpenClawOrchestrator implements OrchestratorService {
-  readonly name = "openclaw";
+export class FeedrBrain implements OrchestratorService {
+  readonly name = "feedr-brain";
   private apiKey: string;
   private model: string;
   private supabaseUrl: string;
