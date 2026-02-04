@@ -288,6 +288,19 @@
   animation: clipArrive var(--feedr-duration-slow) var(--feedr-easing-snap) forwards;
 }
 
+/* Manufacturing gears */
+@keyframes gearSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes gearFlow {
+  0% { left: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
 /* ============================================
    SCROLLBAR (Minimal)
    ============================================ */

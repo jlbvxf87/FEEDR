@@ -9,6 +9,8 @@ interface ResultsGridProps {
   clips: Clip[];
   onClipClick: (index: number) => void;
   isLoading?: boolean;
+  /** Only show this many slots (batch_size) - no extra empty rows */
+  batchSize?: number;
 }
 
 function ClipTile({
@@ -160,9 +162,14 @@ function SkeletonTile() {
   );
 }
 
-export function ResultsGrid({ clips, onClipClick, isLoading }: ResultsGridProps) {
+export function ResultsGrid({ clips, onClipClick, isLoading, batchSize }: ResultsGridProps) {
   const [newClipIds, setNewClipIds] = useState<Set<string>>(new Set());
   const prevClipsRef = useRef<Clip[]>([]);
+
+  // Only show slots for actual batch size - no extra empty rows
+  const slotCount = clips.length > 0
+    ? clips.length
+    : (isLoading && batchSize ? batchSize : 0);
 
   // Track newly ready clips for animation
   useEffect(() => {
@@ -191,7 +198,7 @@ export function ResultsGrid({ clips, onClipClick, isLoading }: ResultsGridProps)
 
   const tiles = [];
   
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < slotCount; i++) {
     if (clips[i]) {
       tiles.push(
         <ClipTile

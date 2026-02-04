@@ -31,11 +31,11 @@ export class MockScriptService implements ScriptService {
     // Simulate API delay
     await new Promise((resolve) => setTimeout(resolve, 200 + Math.random() * 300));
     
-    const topic = intent_text.split(" ").slice(0, 3).join(" ");
+    const topic = intent_text.split(" ").slice(0, 4).join(" ") || "this";
     const hookTemplate = HOOK_TEMPLATES[variant_index % HOOK_TEMPLATES.length];
     const hook = hookTemplate.replace("{topic}", topic);
     
-    const script_spoken = `${hook} So I've been researching ${intent_text} for weeks now, and what I found is actually surprising. Most people think they know about this, but they're missing the key insight. Let me break it down for you real quick.`;
+    const script_spoken = `${hook} So I've been researching ${intent_text} and what I found is actually surprising. Most people think they know about this, but they're missing the key insight. Let me break it down for you real quick.`;
     
     const on_screen_text_json = [
       { t: 0.0, text: hook },

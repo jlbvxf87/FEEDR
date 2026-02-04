@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, Suspense, useMemo, useRef } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseBrowser";
 import type { Preset, Batch, Clip, PresetKey, BatchMode, BatchSize, OutputType } from "@/lib/types";
@@ -22,7 +23,6 @@ function FeedPageContent() {
   const [selectedPreset, setSelectedPreset] = useState<PresetKey>("AUTO");
   const [currentBatch, setCurrentBatch] = useState<Batch | null>(null);
   const [clips, setClips] = useState<Clip[]>([]);
-  const [recentWinners, setRecentWinners] = useState<Clip[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitialIndex, setModalInitialIndex] = useState(0);
@@ -82,16 +82,6 @@ function FeedPageContent() {
         if (presetsError) throw presetsError;
         setPresets((presetsData || []) as Preset[]);
 
-        const { data: winnersData } = await supabase
-          .from("clips")
-          .select("*")
-          .eq("winner", true)
-          .eq("status", "ready")
-          .order("created_at", { ascending: false })
-          .limit(6);
-
-        setRecentWinners((winnersData || []) as Clip[]);
-
         // Load total spent (sum of all batch costs)
         const { data: batchesData } = await supabase
           .from("batches")
@@ -129,12 +119,18 @@ function FeedPageContent() {
     loadData();
   }, []);
 
-  // Poll for updates while batch is running
+  // Poll for updates and trigger worker while batch is running
   useEffect(() => {
     if (!currentBatch || currentBatch.status !== "running") return;
 
     const pollInterval = setInterval(async () => {
       try {
+        // Trigger worker to process queued jobs (compile, tts, video, assemble)
+        for (let i = 0; i < 5; i++) {
+          const { data } = await supabase.functions.invoke("worker", { body: { action: "run-once" } });
+          if (data?.processed !== true) break; // No more jobs
+        }
+
         const { data: batchData } = await supabase
           .from("batches")
           .select("*")
@@ -479,34 +475,58 @@ function FeedPageContent() {
           )}
         </section>
 
-        {/* Workflow & Results */}
+        {/* Workflow - prompt + manufacturing steps only; no video results on feed */}
         {showManufacturing && currentBatch && (
           <section className="space-y-4">
             <ManufacturingPanel
               clips={clips}
               batch={currentBatch}
             />
-            <ResultsGrid
-              clips={clips}
-              onClipClick={handleClipClick}
-              isLoading={isRunning}
-            />
           </section>
         )}
 
-        {!showManufacturing && clips.length > 0 && (
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-medium text-white">Results</h2>
-              <span className="text-xs text-[#4B5563]">
-                {clips.filter(c => c.status === "ready").length} ready
-              </span>
+        {/* Batch complete - direct to Library */}
+        {!showManufacturing && currentBatch?.status === "done" && clips.length > 0 && (
+          <section className="text-center py-12">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[#2EE6C9]/20 flex items-center justify-center">
+              <span className="text-3xl">✓</span>
             </div>
-            <ResultsGrid
-              clips={clips}
-              onClipClick={handleClipClick}
-              isLoading={false}
-            />
+            <p className="text-white font-medium mb-1">Batch complete</p>
+            <p className="text-[#6B7A8F] text-sm mb-4">
+              {clips.filter(c => c.status === "ready").length} {outputType}s ready
+            </p>
+            <Link
+              href="/library"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#2EE6C9] text-[#0B0E11] font-semibold text-sm hover:opacity-90 transition-opacity"
+            >
+              Open in Library
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </Link>
+            <button
+              onClick={() => {
+                setCurrentBatch(null);
+                setClips([]);
+              }}
+              className="block w-full mt-3 text-[#6B7A8F] text-sm hover:text-white transition-colors"
+            >
+              Create another
+            </button>
+          </section>
+        )}
+
+        {/* Batch failed */}
+        {!showManufacturing && currentBatch?.status === "failed" && (
+          <section className="text-center py-12">
+            <p className="text-white font-medium mb-1">Batch failed</p>
+            <p className="text-[#6B7A8F] text-sm mb-4">{currentBatch.error || "Something went wrong"}</p>
+            <button
+              onClick={() => { setCurrentBatch(null); setClips([]); }}
+              className="text-[#2EE6C9] text-sm font-medium hover:underline"
+            >
+              Create another
+            </button>
           </section>
         )}
 
@@ -522,33 +542,6 @@ function FeedPageContent() {
             <p className="text-[#4B5563] text-xs">
               AI generates {outputType === "video" ? "3 video" : "9 image"} variations
             </p>
-          </section>
-        )}
-
-        {/* Recent Winners */}
-        {!currentBatch && recentWinners.length > 0 && (
-          <section>
-            <h2 className="text-xs font-medium text-[#4B5563] uppercase tracking-wider mb-3">
-              Recent Winners
-            </h2>
-            <div className="grid grid-cols-3 gap-2">
-              {recentWinners.slice(0, 3).map((clip) => (
-                <div
-                  key={clip.id}
-                  className="aspect-[9/16] rounded-xl overflow-hidden bg-[#12161D] border border-[#1C2230]"
-                >
-                  {clip.final_url && (
-                    <video
-                      src={clip.final_url}
-                      className="w-full h-full object-cover"
-                      muted
-                      playsInline
-                      preload="metadata"
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
           </section>
         )}
       </main>

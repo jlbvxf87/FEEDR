@@ -41,14 +41,15 @@ export class MockImageService implements ImageService {
   readonly supportedImageTypes: ImageType[] = ["product", "lifestyle", "ad", "ugc", "hero", "custom"];
 
   async generateImage(params: ImageGenerationParams): Promise<ImageOutput> {
-    const { clip_id, image_type, aspect_ratio = "1:1" } = params;
+    const { prompt, clip_id, image_type, aspect_ratio = "1:1" } = params;
     
     // Simulate API delay
     await new Promise((resolve) => setTimeout(resolve, 300 + Math.random() * 400));
     
-    // Pick a sample image based on type and clip_id hash
+    // Pick sample image based on prompt + clip_id so different prompts get different images
     const typeImages = SAMPLE_IMAGES[image_type] || SAMPLE_IMAGES.product;
-    const imageIndex = clip_id.charCodeAt(0) % typeImages.length;
+    const hash = (prompt || "").split("").reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0);
+    const imageIndex = Math.abs(hash + clip_id.charCodeAt(0)) % typeImages.length;
     
     const dimensions = ASPECT_RATIO_DIMENSIONS[aspect_ratio] || ASPECT_RATIO_DIMENSIONS["1:1"];
     

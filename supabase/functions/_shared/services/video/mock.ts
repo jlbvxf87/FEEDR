@@ -18,13 +18,14 @@ export class MockVideoService implements VideoService {
   readonly supportedAspectRatios = ["9:16", "16:9", "1:1"];
 
   async generateVideo(params: VideoGenerationParams): Promise<VideoOutput> {
-    const { clip_id, duration = 15 } = params;
+    const { prompt, clip_id, duration = 15 } = params;
     
     // Simulate API delay (video generation takes longer)
     await new Promise((resolve) => setTimeout(resolve, 500 + Math.random() * 600));
     
-    // Pick a sample video based on clip_id hash
-    const videoIndex = clip_id.charCodeAt(0) % SAMPLE_VIDEOS.length;
+    // Pick sample video based on prompt + clip_id so different prompts get different videos
+    const hash = (prompt || "").split("").reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0);
+    const videoIndex = Math.abs(hash + clip_id.charCodeAt(0)) % SAMPLE_VIDEOS.length;
     
     return {
       raw_video_url: SAMPLE_VIDEOS[videoIndex],
