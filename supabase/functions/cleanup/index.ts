@@ -13,9 +13,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Cleanup thresholds
-const STUCK_JOB_MINUTES = 5;
-const INCOMPLETE_BATCH_HOURS = 1;
+// Cleanup thresholds - generous for real API calls
+const STUCK_JOB_MINUTES = 20;        // Real APIs can take 10+ minutes
+const INCOMPLETE_BATCH_HOURS = 2;    // Give batches 2 hours before marking failed
 const FAILED_BATCH_HOURS = 24;
 
 interface ClipForCleanup {

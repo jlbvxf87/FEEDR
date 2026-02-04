@@ -40,11 +40,8 @@ serve(async (req) => {
     const serviceConfig = services.getServiceConfig();
     console.log("Worker using services:", serviceConfig);
 
-    // Get the oldest queued job
-    // Also check for stuck "running" jobs (running > 60 seconds based on created_at)
-    const stuckThreshold = new Date(Date.now() - 60000).toISOString();
-    
-    // First try queued jobs
+    // Get the oldest queued job only - don't touch running jobs here
+    // Stuck job detection is handled by cron-worker every 30 minutes
     let { data: job, error: jobError } = await supabase
       .from("jobs")
       .select("*")
@@ -52,24 +49,6 @@ serve(async (req) => {
       .order("created_at", { ascending: true })
       .limit(1)
       .single();
-    
-    // If no queued jobs, check for stuck running jobs
-    if (!job && (!jobError || jobError.code === "PGRST116")) {
-      const stuckResult = await supabase
-        .from("jobs")
-        .select("*")
-        .eq("status", "running")
-        .lt("created_at", stuckThreshold)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .single();
-      
-      if (stuckResult.data) {
-        job = stuckResult.data;
-        jobError = stuckResult.error;
-        console.log(`Found stuck job ${job.id}, retrying...`);
-      }
-    }
 
     if (jobError && jobError.code !== "PGRST116") {
       throw new Error(`Failed to fetch job: ${jobError.message}`);

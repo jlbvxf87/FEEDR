@@ -83,17 +83,20 @@ serve(async (req) => {
       }
     }
     
-    // Quick stuck job check on every run (lightweight)
-    const stuckThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const { data: stuckJobs } = await supabase
-      .from("jobs")
-      .update({ status: "queued", error: "Reset: stuck job" })
-      .eq("status", "running")
-      .lt("created_at", stuckThreshold)
-      .select("id");
-    
-    if (stuckJobs && stuckJobs.length > 0) {
-      console.log(`Reset ${stuckJobs.length} stuck jobs`);
+    // Only check for stuck jobs every 30 minutes (on minutes 0, 30)
+    // Real API calls (especially video) can take 5-10+ minutes
+    if (currentMinute === 0 || currentMinute === 30) {
+      const stuckThreshold = new Date(Date.now() - 15 * 60 * 1000).toISOString(); // 15 minutes
+      const { data: stuckJobs } = await supabase
+        .from("jobs")
+        .update({ status: "queued", error: "Reset: stuck job (>15min)" })
+        .eq("status", "running")
+        .lt("created_at", stuckThreshold)
+        .select("id");
+      
+      if (stuckJobs && stuckJobs.length > 0) {
+        console.log(`Reset ${stuckJobs.length} stuck jobs (>15min old)`);
+      }
     }
 
     const elapsed = Date.now() - startTime;
