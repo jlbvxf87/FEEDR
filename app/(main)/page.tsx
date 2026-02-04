@@ -232,24 +232,56 @@ function FeedPageContent() {
 
         {/* KISS Input Section */}
         <section className="space-y-3">
-          {/* Main Input */}
+          {/* Main Input - Expandable Textarea for Detailed Prompts */}
           <div className="relative">
-            <input
-              type="text"
+            <textarea
               value={intentText}
-              onChange={(e) => setIntentText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
-              placeholder="What are we feeding today?"
+              onChange={(e) => {
+                setIntentText(e.target.value);
+                // Auto-resize
+                e.target.style.height = "auto";
+                e.target.style.height = Math.min(e.target.scrollHeight, 300) + "px";
+              }}
+              onKeyDown={(e) => {
+                // Cmd/Ctrl + Enter to submit
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  handleGenerate();
+                }
+              }}
+              placeholder={`What are we feeding today?
+
+Examples:
+• "Jordan 4s unboxing, hype energy, fast cuts"
+• "Luxury skincare ad, soft lighting, ASMR vibes, target 25-35 women"
+• "SaaS product demo, clean UI showcase, professional tone, 30 sec"`}
               disabled={isGenerating || isRunning}
+              rows={2}
               className={cn(
-                "w-full px-5 py-4 rounded-xl",
+                "w-full px-5 py-4 rounded-xl resize-none",
                 "bg-[#1C2230] border border-[#2D3748]",
-                "text-white placeholder:text-[#6B7280]",
+                "text-white placeholder:text-[#6B7280] placeholder:text-sm",
                 "focus:outline-none focus:border-[#2EE6C9]/50",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
-                "transition-all duration-200"
+                "transition-all duration-200",
+                "min-h-[60px] max-h-[300px]"
               )}
+              style={{ overflow: "hidden" }}
             />
+            {/* Character count & hint */}
+            <div className="absolute bottom-2 right-3 flex items-center gap-3">
+              {intentText.length > 0 && (
+                <span className={cn(
+                  "text-[10px]",
+                  intentText.length > 500 ? "text-yellow-500" : "text-[#4B5563]"
+                )}>
+                  {intentText.length}
+                </span>
+              )}
+              <span className="text-[10px] text-[#4B5563]">
+                ⌘↵ to generate
+              </span>
+            </div>
           </div>
 
           {/* KISS Controls: Output Type Toggle + Preset dropdown + FEED button */}
