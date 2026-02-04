@@ -5,7 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseBrowser";
 import type { Preset, Batch, Clip, PresetKey, BatchMode, BatchSize, OutputType, ImageType } from "@/lib/types";
 import { ImagePack, IMAGE_PACKS, generateImagePrompts } from "@/lib/imagePresets";
+import { QualityMode, estimateBatchCost, formatCost, analyzeComplexity } from "@/lib/costs";
 import { ImagePackSelector } from "@/components/ImagePackSelector";
+import { QualityModeToggle } from "@/components/QualityModeSelector";
 import { Header } from "@/components/nav/Header";
 import { PresetGrid } from "@/components/PresetGrid";
 import { ResultsGrid } from "@/components/ResultsGrid";
@@ -37,6 +39,10 @@ function FeedPageContent() {
   const [outputType, setOutputType] = useState<OutputType>("video");
   const [imagePack, setImagePack] = useState<ImagePack>("auto");
   const [showImagePacks, setShowImagePacks] = useState(false);
+  
+  // Quality mode for cost optimization
+  const [qualityMode, setQualityMode] = useState<QualityMode>("balanced");
+  const [showCostInfo, setShowCostInfo] = useState(false);
 
   const supabase = createClient();
 
@@ -149,6 +155,7 @@ function FeedPageContent() {
           output_type: outputType,
           image_pack: outputType === "image" ? imagePack : undefined,
           image_prompts: imagePrompts,
+          quality_mode: qualityMode,
         },
       });
 
@@ -174,7 +181,7 @@ function FeedPageContent() {
       setError(err instanceof Error ? err.message : "Something broke. Try again.");
       setIsGenerating(false);
     }
-  }, [intentText, selectedPreset, outputType, imagePack, isGenerating]);
+  }, [intentText, selectedPreset, outputType, imagePack, qualityMode, isGenerating]);
 
   const handleRunWorker = useCallback(async () => {
     try {
@@ -277,6 +284,13 @@ function FeedPageContent() {
               </button>
             </div>
 
+            {/* Quality Mode Toggle */}
+            <QualityModeToggle
+              selected={qualityMode}
+              onSelect={setQualityMode}
+              disabled={isGenerating || isRunning}
+            />
+
             {/* Image Pack (only when Photo selected) */}
             {outputType === "image" && (
               <button
@@ -354,21 +368,28 @@ function FeedPageContent() {
               </button>
             )}
 
-            {/* FEED Button */}
-            <button
-              onClick={handleGenerate}
-              disabled={!intentText.trim() || isGenerating || isRunning}
-              className={cn(
-                "flex-1 py-2.5 rounded-lg font-semibold uppercase tracking-wider",
-                "bg-gradient-to-r from-[#2EE6C9] to-[#0095FF] text-[#0B0E11]",
-                "hover:opacity-90",
-                "disabled:opacity-40 disabled:cursor-not-allowed",
-                "transition-all duration-200",
-                !isGenerating && !isRunning && intentText.trim() && "shadow-lg shadow-[#2EE6C9]/20"
+            {/* FEED Button with Cost */}
+            <div className="flex-1 flex flex-col gap-1">
+              <button
+                onClick={handleGenerate}
+                disabled={!intentText.trim() || isGenerating || isRunning}
+                className={cn(
+                  "w-full py-2.5 rounded-lg font-semibold uppercase tracking-wider",
+                  "bg-gradient-to-r from-[#2EE6C9] to-[#0095FF] text-[#0B0E11]",
+                  "hover:opacity-90",
+                  "disabled:opacity-40 disabled:cursor-not-allowed",
+                  "transition-all duration-200",
+                  !isGenerating && !isRunning && intentText.trim() && "shadow-lg shadow-[#2EE6C9]/20"
+                )}
+              >
+                {isGenerating || isRunning ? "COOKING..." : outputType === "image" ? "GENERATE" : "FEED"}
+              </button>
+              {intentText.trim() && !isGenerating && !isRunning && (
+                <p className="text-[10px] text-[#6B7280] text-center">
+                  Est. {formatCost(estimateBatchCost(qualityMode, outputType, outputType === "image" ? 9 : 10).totalCents)} • {qualityMode}
+                </p>
               )}
-            >
-              {isGenerating || isRunning ? "COOKING..." : outputType === "image" ? "GENERATE" : "FEED"}
-            </button>
+            </div>
           </div>
 
           {/* Image Pack Selector (only when Photo selected) */}

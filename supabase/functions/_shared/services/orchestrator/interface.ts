@@ -1,8 +1,11 @@
-// FEEDR - OpenClaw Orchestrator Interface
+// FEEDR - Orchestrator Interface with Quality Mode Support
+
+import { QualityMode } from "../costs.ts";
 
 export interface UserIntent {
   raw_input: string;
   user_id: string;
+  quality_mode?: QualityMode;
 }
 
 export interface ParsedIntent {
@@ -17,6 +20,20 @@ export interface ParsedIntent {
   research_query?: string;
   confidence: number;
   reasoning: string;
+  // Quality optimization
+  quality_mode?: QualityMode;
+  model_config?: {
+    scriptModel: string;
+    scriptService: string;
+    voiceModel: string;
+    voiceService: string;
+    videoModel: string;
+    videoService: string;
+    imageModel: string;
+    imageService: string;
+    dalleQuality?: string;
+  };
+  estimated_cost_cents?: number;
 }
 
 export interface LearningContext {
@@ -34,6 +51,7 @@ export interface ExecutionPlan {
   steps: ExecutionStep[];
   estimated_duration_seconds: number;
   estimated_cost_cents: number;
+  quality_mode?: QualityMode;
 }
 
 export interface ExecutionStep {
@@ -47,9 +65,15 @@ export interface OrchestratorService {
   parseIntent(input: UserIntent): Promise<ParsedIntent>;
   getLearningContext(user_id: string): Promise<LearningContext>;
   createPlan(intent: ParsedIntent, context: LearningContext): Promise<ExecutionPlan>;
-  execute(plan: ExecutionPlan): Promise<{ batch_id: string }>;
+  execute(plan: ExecutionPlan): Promise<{ batch_id: string; quality_mode?: string }>;
 }
 
 export const INTENT_PARSING_PROMPT = `You are the intelligent orchestrator for FEEDR - a content generation platform.
 Parse user input and determine: output type (video/image), content type, preset, and whether research is needed.
-Return JSON with: output_type, content_type, recommended_preset, needs_research, confidence, reasoning.`;
+
+Consider prompt complexity:
+- Simple prompts (few words, basic requests) → suggest economy mode
+- Moderate prompts (specific requirements) → suggest balanced mode  
+- Complex prompts (creative, technical, professional) → suggest premium mode
+
+Return JSON with: output_type, content_type, product_name, recommended_preset, needs_research, image_pack (for images), confidence, reasoning.`;
