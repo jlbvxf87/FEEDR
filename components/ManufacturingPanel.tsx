@@ -327,13 +327,13 @@ export function ManufacturingPanel({ clips, batch, recentWinners = [] }: Manufac
                 {clip.final_url || clip.image_url ? (
                   outputType === "image" ? (
                     <img
-                      src={clip.image_url || clip.final_url}
+                      src={clip.image_url || clip.final_url || ""}
                       alt=""
                       className="w-full h-full object-cover"
                     />
                   ) : (
                     <video
-                      src={clip.final_url}
+                      src={clip.final_url || ""}
                       className="w-full h-full object-cover"
                       muted
                       loop
