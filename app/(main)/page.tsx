@@ -166,11 +166,6 @@ function FeedPageContent() {
     
     setIsGenerating(true);
     setError(null);
-    
-    // Scroll to manufacturing section after a brief delay
-    setTimeout(() => {
-      manufacturingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 300);
 
     try {
       const mode: BatchMode = "hook_test";
@@ -221,6 +216,11 @@ function FeedPageContent() {
         .order("variant_id");
 
       setClips((clipsData || []) as Clip[]);
+      
+      // Scroll to manufacturing section after state updates
+      setTimeout(() => {
+        manufacturingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
     } catch (err) {
       console.error("Generate error:", err);
       setError(err instanceof Error ? err.message : "Something broke. Try again.");
