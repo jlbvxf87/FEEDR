@@ -332,51 +332,59 @@ function FeedPageContent() {
             </button>
           </div>
 
-          {/* Options bar - shows when typing */}
-          {intentText.trim() && !isGenerating && !isRunning && (
-            <div className="flex items-center justify-between px-1">
-              {/* Left: Style */}
-              <button
-                onClick={() => setShowPresets(!showPresets)}
-                className="text-xs text-[#4B5563] hover:text-[#6B7A8F] transition-colors"
-              >
-                {selectedPreset === "AUTO" ? `Auto • ${estimatedCost.modeLabel}` : `${presetLabel}`}
-              </button>
-
-              {/* Right: Batch size + Cost */}
-              <div className="flex items-center gap-3">
-                {/* Batch size selector (video only) */}
-                {outputType === "video" && (
-                  <div className="flex items-center bg-[#12161D] rounded-lg p-0.5 border border-[#1C2230]">
-                    {([1, 3, 5] as const).map((size) => (
-                      <button
-                        key={size}
-                        onClick={() => setVideoBatchSize(size)}
-                        className={cn(
-                          "px-2.5 py-1 rounded-md text-xs font-medium transition-all",
-                          videoBatchSize === size
-                            ? "bg-[#1C2230] text-white"
-                            : "text-[#4B5563] hover:text-[#6B7A8F]"
-                        )}
-                      >
-                        {size}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                
-                {/* Count label */}
-                <span className="text-xs text-[#4B5563]">
-                  {outputType === "video" ? `${videoBatchSize} video${videoBatchSize > 1 ? 's' : ''}` : "9 images"}
-                </span>
-
-                {/* Cost */}
-                <span className="text-xs text-[#2EE6C9] font-medium">
-                  ~{formatCost(estimatedCost.totalCents)}
-                </span>
-              </div>
+          {/* Options - Always visible */}
+          <div className={cn(
+            "flex items-center justify-between p-3 rounded-xl",
+            "bg-[#12161D] border border-[#1C2230]",
+            (isGenerating || isRunning) && "opacity-50 pointer-events-none"
+          )}>
+            {/* Batch size selector */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-[#6B7A8F]">
+                {outputType === "video" ? "Videos:" : "Images:"}
+              </span>
+              {outputType === "video" ? (
+                <div className="flex items-center bg-[#0B0E11] rounded-lg p-0.5">
+                  {([1, 3, 5] as const).map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => setVideoBatchSize(size)}
+                      disabled={isGenerating || isRunning}
+                      className={cn(
+                        "w-8 h-7 rounded-md text-sm font-medium transition-all",
+                        videoBatchSize === size
+                          ? "bg-[#2EE6C9] text-[#0B0E11]"
+                          : "text-[#6B7A8F] hover:text-white"
+                      )}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-sm text-white font-medium">9</span>
+              )}
             </div>
-          )}
+
+            {/* Cost estimate */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#6B7A8F]">Est. cost:</span>
+              <span className="text-sm text-[#2EE6C9] font-semibold">
+                {formatCost(estimatedCost.totalCents)}
+              </span>
+            </div>
+          </div>
+
+          {/* Style selector - subtle */}
+          <div className="flex justify-center">
+            <button
+              onClick={() => setShowPresets(!showPresets)}
+              disabled={isGenerating || isRunning}
+              className="text-xs text-[#4B5563] hover:text-[#6B7A8F] transition-colors disabled:opacity-50"
+            >
+              Style: {selectedPreset === "AUTO" ? "Auto" : presetLabel}
+            </button>
+          </div>
 
           {/* Preset Grid */}
           {showPresets && (
