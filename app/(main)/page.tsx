@@ -451,7 +451,6 @@ function FeedPageContent() {
               </div>
             </div>
           </div>
-          </div>
 
           {/* Style selector - subtle */}
           <div className="flex justify-center">
