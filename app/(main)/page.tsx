@@ -229,15 +229,46 @@ function FeedPageContent() {
           </div>
         )}
 
-        {/* Simple Input */}
-        <section>
+        {/* Clean Input Section */}
+        <section className="space-y-4">
+          {/* Type Toggle */}
+          <div className="flex justify-center">
+            <div className="inline-flex bg-[#1A1F2B] rounded-full p-1">
+              <button
+                onClick={() => setOutputType("video")}
+                disabled={isGenerating || isRunning}
+                className={cn(
+                  "px-5 py-2 rounded-full text-sm font-medium transition-all",
+                  outputType === "video"
+                    ? "bg-white text-black"
+                    : "text-[#6B7A8F] hover:text-white"
+                )}
+              >
+                Video
+              </button>
+              <button
+                onClick={() => setOutputType("image")}
+                disabled={isGenerating || isRunning}
+                className={cn(
+                  "px-5 py-2 rounded-full text-sm font-medium transition-all",
+                  outputType === "image"
+                    ? "bg-white text-black"
+                    : "text-[#6B7A8F] hover:text-white"
+                )}
+              >
+                Image
+              </button>
+            </div>
+          </div>
+
+          {/* Input + Button */}
           <div className="flex gap-3">
             <input
               type="text"
               value={intentText}
               onChange={(e) => setIntentText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
-              placeholder="What do you want to create?"
+              placeholder={outputType === "video" ? "Describe your video..." : "Describe your image..."}
               disabled={isGenerating || isRunning}
               className={cn(
                 "flex-1 h-12 px-4 rounded-xl",
@@ -262,26 +293,20 @@ function FeedPageContent() {
             </button>
           </div>
           
-          {/* Minimal options - only show when needed */}
+          {/* Secondary options */}
           {intentText.trim() && !isGenerating && !isRunning && (
-            <div className="flex items-center gap-4 mt-3 px-1">
-              <button
-                onClick={() => setOutputType(outputType === "video" ? "image" : "video")}
-                className="text-sm text-[#6B7A8F] hover:text-white transition-colors"
-              >
-                {outputType === "video" ? "Video" : "Image"}
-              </button>
+            <div className="flex items-center justify-center gap-6">
               <button
                 onClick={() => setShowPresets(!showPresets)}
                 className="text-sm text-[#6B7A8F] hover:text-white transition-colors"
               >
-                Style
+                Style: {presetLabel}
               </button>
               <button
                 onClick={() => setShowResearch(true)}
                 className="text-sm text-[#6B7A8F] hover:text-white transition-colors"
               >
-                Research
+                Find trending hooks
               </button>
             </div>
           )}

@@ -74,7 +74,7 @@ export function ResearchPanel({ query, onUseHook, onClose }: ResearchPanelProps)
               Trend Research
             </h2>
             <p className="text-xs text-[#6B7280] mt-0.5">
-              Powered by Clawdbot
+              Find viral hooks from TikTok
             </p>
           </div>
           <button
