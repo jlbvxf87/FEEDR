@@ -335,81 +335,122 @@ function FeedPageContent() {
 
           {/* Options - Always visible */}
           <div className={cn(
-            "space-y-3 p-4 rounded-xl",
+            "space-y-4 p-4 rounded-xl",
             "bg-[#12161D] border border-[#1C2230]",
             (isGenerating || isRunning) && "opacity-50 pointer-events-none"
           )}>
-            {/* Row 1: Count + Quality */}
+            {/* Row 1: Quantity selector */}
             <div className="flex items-center justify-between">
-              {/* Batch size selector */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-[#6B7A8F] w-14">
-                  {outputType === "video" ? "Videos" : "Images"}
-                </span>
-                {outputType === "video" ? (
-                  <div className="flex items-center bg-[#0B0E11] rounded-lg p-0.5">
-                    {([1, 3, 5] as const).map((size) => (
-                      <button
-                        key={size}
-                        onClick={() => setVideoBatchSize(size)}
-                        disabled={isGenerating || isRunning}
-                        className={cn(
-                          "w-9 h-8 rounded-md text-sm font-medium transition-all",
-                          videoBatchSize === size
-                            ? "bg-[#2EE6C9] text-[#0B0E11]"
-                            : "text-[#6B7A8F] hover:text-white"
-                        )}
-                      >
-                        {size}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <span className="text-sm text-white font-medium px-3">9</span>
-                )}
-              </div>
-
-              {/* Quality mode selector */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-[#6B7A8F]">Quality</span>
-                <div className="flex items-center bg-[#0B0E11] rounded-lg p-0.5">
-                  {(["economy", "balanced", "premium"] as const).map((mode) => (
+              <span className="text-xs text-[#6B7A8F]">
+                {outputType === "video" ? "Videos" : "Images"}
+              </span>
+              {outputType === "video" ? (
+                <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
+                  {([1, 3, 5] as const).map((size) => (
                     <button
-                      key={mode}
-                      onClick={() => setQualityMode(mode)}
+                      key={size}
+                      onClick={() => setVideoBatchSize(size)}
                       disabled={isGenerating || isRunning}
                       className={cn(
-                        "px-3 h-8 rounded-md text-xs font-medium transition-all",
-                        qualityMode === mode
-                          ? mode === "economy" 
-                            ? "bg-[#F59E0B] text-[#0B0E11]"
-                            : mode === "balanced"
-                              ? "bg-[#2EE6C9] text-[#0B0E11]"
-                              : "bg-[#A855F7] text-white"
+                        "w-10 h-8 rounded-full text-sm font-semibold transition-all",
+                        videoBatchSize === size
+                          ? "bg-[#2EE6C9] text-[#0B0E11]"
                           : "text-[#6B7A8F] hover:text-white"
                       )}
                     >
-                      {mode === "economy" ? "Fast" : mode === "balanced" ? "Good" : "Best"}
+                      {size}
                     </button>
                   ))}
                 </div>
+              ) : (
+                <span className="text-sm text-white font-medium bg-[#0B0E11] px-4 py-2 rounded-full">9</span>
+              )}
+            </div>
+
+            {/* Row 2: Quality selector */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[#6B7A8F]">Quality</span>
+              <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
+                {(["economy", "balanced", "premium"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setQualityMode(mode)}
+                    disabled={isGenerating || isRunning}
+                    className={cn(
+                      "px-4 h-8 rounded-full text-sm font-semibold transition-all",
+                      qualityMode === mode
+                        ? mode === "economy" 
+                          ? "bg-[#F59E0B] text-[#0B0E11]"
+                          : mode === "balanced"
+                            ? "bg-[#2EE6C9] text-[#0B0E11]"
+                            : "bg-[#A855F7] text-white"
+                        : "text-[#6B7A8F] hover:text-white"
+                    )}
+                  >
+                    {mode === "economy" ? "Fast" : mode === "balanced" ? "Good" : "Best"}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Row 2: Model info + Cost */}
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-[#4B5563]">
-                {qualityMode === "economy" && "GPT-4o Mini • Basic voice • Fast video"}
-                {qualityMode === "balanced" && "Claude Haiku • ElevenLabs • Runway Gen3"}
-                {qualityMode === "premium" && "Claude Sonnet • ElevenLabs HD • Sora"}
-              </span>
+            {/* Row 3: Cost estimate with info tooltip */}
+            <div className="flex items-center justify-between pt-2 border-t border-[#1C2230]">
+              <div className="relative">
+                <button 
+                  className="flex items-center gap-1.5 text-xs text-[#6B7A8F] hover:text-white transition-colors group"
+                  onClick={(e) => {
+                    const tooltip = e.currentTarget.nextElementSibling;
+                    if (tooltip) {
+                      tooltip.classList.toggle('opacity-0');
+                      tooltip.classList.toggle('invisible');
+                      tooltip.classList.toggle('opacity-100');
+                      tooltip.classList.toggle('visible');
+                    }
+                  }}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>View models</span>
+                </button>
+                {/* Tooltip - positioned to the right */}
+                <div className="absolute left-0 bottom-full mb-2 px-4 py-3 bg-[#1C2230] rounded-xl opacity-0 invisible transition-all duration-200 z-50 shadow-xl border border-[#2A3441] min-w-[200px]">
+                  <div className="text-[10px] text-[#6B7A8F] uppercase tracking-wider mb-2">Models Used</div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-[#6B7A8F]">Script</span>
+                      <span className="text-white font-medium">
+                        {qualityMode === "economy" ? "GPT-4o Mini" : qualityMode === "balanced" ? "Claude Haiku" : "Claude Sonnet"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#6B7A8F]">Voice</span>
+                      <span className="text-white font-medium">
+                        {qualityMode === "economy" ? "Basic TTS" : qualityMode === "balanced" ? "ElevenLabs" : "ElevenLabs HD"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#6B7A8F]">Video</span>
+                      <span className="text-white font-medium">
+                        {qualityMode === "economy" ? "Fast Gen" : qualityMode === "balanced" ? "Runway Gen3" : "Sora"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-[#2A3441] text-[10px] text-[#4B5563]">
+                    {outputType === "video" ? videoBatchSize : 9} {outputType}{(outputType === "video" ? videoBatchSize : 9) > 1 ? 's' : ''} × {qualityMode} tier
+                  </div>
+                  {/* Arrow */}
+                  <div className="absolute top-full left-6 border-8 border-transparent border-t-[#1C2230]" />
+                </div>
+              </div>
               <div className="flex items-center gap-2">
-                <span className="text-[#6B7A8F]">Est:</span>
-                <span className="text-[#2EE6C9] font-semibold text-sm">
+                <span className="text-xs text-[#6B7A8F]">Est.</span>
+                <span className="text-[#2EE6C9] font-bold text-lg">
                   {formatCost(estimatedCost.totalCents)}
                 </span>
               </div>
             </div>
+          </div>
           </div>
 
           {/* Style selector - subtle */}

@@ -136,13 +136,16 @@ export default function ProfilePage() {
                   }
                 />
                 <SettingsRow 
-                  label="Default Batch Size" 
-                  description="Clips per generation"
+                  label="Default Video Count" 
+                  description="Videos per generation"
                   action={
-                    <select className="bg-[#0B0E11] border border-[#2D3748] rounded px-2 py-1 text-sm text-white">
+                    <select 
+                      className="bg-[#0B0E11] border border-[#2D3748] rounded px-2 py-1 text-sm text-white"
+                      defaultValue="3"
+                    >
+                      <option value="1">1</option>
+                      <option value="3">3</option>
                       <option value="5">5</option>
-                      <option value="10">10</option>
-                      <option value="15" selected>15</option>
                     </select>
                   }
                 />
