@@ -6,7 +6,7 @@ import { useEffect, useState, useMemo } from "react";
 
 interface ManufacturingPanelProps {
   clips: Clip[];
-  batch: Batch;
+  batch: Batch & { estimated_cost?: number };
   recentWinners?: Clip[];
 }
 
@@ -180,8 +180,15 @@ function Connection({ from, to }: { from: Node; to: Node }) {
   );
 }
 
+// Format cost helper
+function formatCost(cents: number): string {
+  if (cents < 100) return `${cents}¢`;
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
   const outputType = (batch as any).output_type || "video";
+  const estimatedCost = batch.estimated_cost || 0;
   const nodes = useMemo(() => getNodes(clips, outputType), [clips, outputType]);
   const readyCount = clips.filter((c) => c.status === "ready").length;
   const totalCount = clips.length;
@@ -194,14 +201,14 @@ export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
       <div className="px-5 py-4 border-b border-[#1C2230] flex items-center justify-between">
         <div className="flex items-center gap-3">
           {allDone ? (
-            <div className="w-8 h-8 rounded-full bg-[#2EE6C9]/20 flex items-center justify-center">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2EE6C9" strokeWidth="2">
+            <div className="w-10 h-10 rounded-xl bg-[#2EE6C9]/20 flex items-center justify-center">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2EE6C9" strokeWidth="2">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             </div>
           ) : (
-            <div className="w-8 h-8 rounded-full bg-[#0095FF]/20 flex items-center justify-center">
-              <div className="w-4 h-4 border-2 border-[#0095FF] border-t-transparent rounded-full animate-spin" />
+            <div className="w-10 h-10 rounded-xl bg-[#0095FF]/10 flex items-center justify-center">
+              <div className="w-5 h-5 border-2 border-[#0095FF] border-t-transparent rounded-full animate-spin" />
             </div>
           )}
           <div>
@@ -214,8 +221,13 @@ export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
           </div>
         </div>
         <div className="text-right">
-          <span className="text-2xl font-bold text-white">{readyCount}</span>
-          <span className="text-lg text-[#4B5563]">/{totalCount}</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-bold text-white">{readyCount}</span>
+            <span className="text-sm text-[#4B5563]">/{totalCount}</span>
+          </div>
+          {estimatedCost > 0 && (
+            <p className="text-xs text-[#2EE6C9] font-medium">{formatCost(estimatedCost)}</p>
+          )}
         </div>
       </div>
 
