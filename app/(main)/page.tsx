@@ -293,20 +293,14 @@ function FeedPageContent() {
             </button>
           </div>
           
-          {/* Secondary options */}
+          {/* Minimal options - only show style if user wants to override */}
           {intentText.trim() && !isGenerating && !isRunning && (
-            <div className="flex items-center justify-center gap-6">
+            <div className="flex items-center justify-center">
               <button
                 onClick={() => setShowPresets(!showPresets)}
-                className="text-sm text-[#6B7A8F] hover:text-white transition-colors"
+                className="text-xs text-[#4B5563] hover:text-[#6B7A8F] transition-colors"
               >
-                Style: {presetLabel}
-              </button>
-              <button
-                onClick={() => setShowResearch(true)}
-                className="text-sm text-[#6B7A8F] hover:text-white transition-colors"
-              >
-                Find trending hooks
+                {selectedPreset === "AUTO" ? "Auto style" : `Style: ${presetLabel}`}
               </button>
             </div>
           )}
