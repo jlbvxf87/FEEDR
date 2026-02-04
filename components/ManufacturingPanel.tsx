@@ -3,10 +3,11 @@
 import { cn } from "@/lib/utils";
 import type { Clip, Batch } from "@/lib/types";
 import { useMemo, useState, useEffect } from "react";
+import { PipelineFeed } from "./PipelineFeed";
 
 interface ManufacturingPanelProps {
   clips: Clip[];
-  batch: Batch & { estimated_cost?: number; created_at: string };
+  batch: Batch & { estimated_cost?: number };
   recentWinners?: Clip[];
 }
 
@@ -21,7 +22,7 @@ interface Node {
 // Estimated time in seconds for each step (for user-friendly estimates)
 const STEP_TIMES = {
   input: 0,
-  brain: 15,
+  research: 45,  // Brain + Apify scraping + analysis
   script: 10,
   voice: 12,
   video: 45,
@@ -31,7 +32,7 @@ const STEP_TIMES = {
   generate: 30,
 };
 
-function getNodes(clips: Clip[], outputType: string): Node[] {
+function getNodes(clips: Clip[], outputType: string, batchStatus: string, hasResearch: boolean): Node[] {
   const statusCounts: Record<string, number> = {
     planned: 0, scripting: 0, vo: 0, rendering: 0,
     generating: 0, assembling: 0, ready: 0, failed: 0,
@@ -46,6 +47,11 @@ function getNodes(clips: Clip[], outputType: string): Node[] {
   const total = clips.length || 1;
   const readyCount = statusCounts.ready;
   const hasStarted = clips.length > 0;
+  
+  // Research phase tracking
+  const isResearching = batchStatus === "researching";
+  const researchComplete = hasResearch || batchStatus === "running" || statusCounts.scripting > 0 || readyCount > 0;
+  
   const hasScripting = statusCounts.scripting > 0 || statusCounts.vo > 0 || statusCounts.rendering > 0 || statusCounts.generating > 0 || statusCounts.assembling > 0 || readyCount > 0;
   const hasVo = statusCounts.vo > 0 || statusCounts.rendering > 0 || statusCounts.assembling > 0 || readyCount > 0;
   const hasRendering = statusCounts.rendering > 0 || statusCounts.generating > 0 || statusCounts.assembling > 0 || readyCount > 0;
@@ -61,8 +67,8 @@ function getNodes(clips: Clip[], outputType: string): Node[] {
   if (outputType === "image") {
     return [
       { id: "input", label: "Input", icon: "📝", status: "complete", estimatedSeconds: STEP_TIMES.input },
-      { id: "brain", label: "Brain", icon: "🧠", status: getStatus(hasStarted, !hasStarted), estimatedSeconds: STEP_TIMES.brain },
-      { id: "prompt", label: "Prompt", icon: "⚡", status: getStatus(hasScripting, hasStarted && !hasScripting), estimatedSeconds: STEP_TIMES.prompt },
+      { id: "research", label: "Research", icon: "🔍", status: getStatus(researchComplete, isResearching), estimatedSeconds: STEP_TIMES.research },
+      { id: "prompt", label: "Prompt", icon: "⚡", status: getStatus(hasScripting, researchComplete && !hasScripting), estimatedSeconds: STEP_TIMES.prompt },
       { id: "generate", label: "Generate", icon: "🎨", status: getStatus(allReady, hasScripting && !allReady), estimatedSeconds: STEP_TIMES.generate },
       { id: "output", label: "Output", icon: "✨", status: getStatus(allReady, false), estimatedSeconds: STEP_TIMES.output },
     ];
@@ -70,8 +76,8 @@ function getNodes(clips: Clip[], outputType: string): Node[] {
 
   return [
     { id: "input", label: "Input", icon: "📝", status: "complete", estimatedSeconds: STEP_TIMES.input },
-    { id: "brain", label: "Brain", icon: "🧠", status: getStatus(hasStarted, !hasStarted), estimatedSeconds: STEP_TIMES.brain },
-    { id: "script", label: "Script", icon: "✍️", status: getStatus(hasVo, hasStarted && statusCounts.scripting > 0), estimatedSeconds: STEP_TIMES.script },
+    { id: "research", label: "Research", icon: "🔍", status: getStatus(researchComplete, isResearching), estimatedSeconds: STEP_TIMES.research },
+    { id: "script", label: "Script", icon: "✍️", status: getStatus(hasVo, researchComplete && statusCounts.scripting > 0), estimatedSeconds: STEP_TIMES.script },
     { id: "voice", label: "Voice", icon: "🎙️", status: getStatus(hasRendering, statusCounts.vo > 0), estimatedSeconds: STEP_TIMES.voice },
     { id: "video", label: "Video", icon: "🎬", status: getStatus(hasAssembling, statusCounts.rendering > 0), estimatedSeconds: STEP_TIMES.video },
     { id: "merge", label: "Merge", icon: "🔗", status: getStatus(allReady, statusCounts.assembling > 0), estimatedSeconds: STEP_TIMES.merge },
@@ -79,15 +85,42 @@ function getNodes(clips: Clip[], outputType: string): Node[] {
   ];
 }
 
-// Friendly status messages for each step
+// Smart, conversational status messages for each step
 const STATUS_MESSAGES: Record<string, string[]> = {
-  brain: ["Analyzing your idea...", "Crafting unique hooks...", "Generating concepts..."],
-  script: ["Writing your script...", "Optimizing for engagement...", "Adding the magic..."],
-  voice: ["Recording voiceover...", "Adding personality...", "Perfecting the tone..."],
-  video: ["Rendering visuals...", "Creating your content...", "Almost there..."],
-  merge: ["Final assembly...", "Adding finishing touches...", "Polishing..."],
-  prompt: ["Crafting image prompts...", "Optimizing for quality...", "Almost ready..."],
-  generate: ["Generating images...", "Creating variations...", "Rendering..."],
+  research: [
+    "Finding what's working right now...",
+    "Analyzing viral patterns in your niche...",
+    "Extracting winning formulas...",
+    "Learning from proven content...",
+  ],
+  script: [
+    "Writing hooks based on viral patterns...",
+    "Crafting your unique variations...",
+    "Making each script different but proven...",
+  ],
+  voice: [
+    "Recording natural voiceover...",
+    "Making it sound authentic...",
+    "Adding the right energy...",
+  ],
+  video: [
+    "Sora is creating your visuals...",
+    "Rendering video content...",
+    "This is where magic happens...",
+  ],
+  merge: [
+    "Putting it all together...",
+    "Final assembly in progress...",
+    "Almost ready for you...",
+  ],
+  prompt: [
+    "Crafting perfect prompts...",
+    "Optimizing for quality...",
+  ],
+  generate: [
+    "Generating your images...",
+    "Creating variations...",
+  ],
 };
 
 // Clean workflow node - rectangular card style
@@ -203,9 +236,10 @@ function formatTime(seconds: number): string {
 }
 
 export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
-  const outputType = (batch as any).output_type || "video";
+  const outputType = batch.output_type || "video";
   const estimatedCost = batch.estimated_cost || 0;
-  const nodes = useMemo(() => getNodes(clips, outputType), [clips, outputType]);
+  const hasResearch = !!batch.research_json;
+  const nodes = useMemo(() => getNodes(clips, outputType, batch.status, hasResearch), [clips, outputType, batch.status, hasResearch]);
   const readyCount = clips.filter((c) => c.status === "ready").length;
   const totalCount = clips.length;
   const allDone = readyCount === totalCount && totalCount > 0;
@@ -272,24 +306,29 @@ export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             {allDone ? (
-              <div className="w-10 h-10 rounded-xl bg-[#2EE6C9]/20 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-[#2EE6C9]/20 flex items-center justify-center shadow-[0_0_20px_rgba(46,230,201,0.3)]">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2EE6C9" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               </div>
             ) : (
-              <div className="w-10 h-10 rounded-xl bg-[#0095FF]/10 border border-[#0095FF]/30 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-[#0095FF]/10 border border-[#0095FF]/30 flex items-center justify-center shadow-[0_0_15px_rgba(0,149,255,0.2)]">
                 <div className="w-5 h-5 border-2 border-[#0095FF] border-t-transparent rounded-full animate-spin" />
               </div>
             )}
             <div>
               <h3 className="text-sm font-semibold text-white">
-                {allDone ? "Complete!" : statusMessage || activeNode?.label || "Processing"}
+                {allDone 
+                  ? "🎉 Ready to post!" 
+                  : statusMessage || activeNode?.label || "Processing"
+                }
               </h3>
               <p className="text-xs text-[#6B7A8F]">
                 {allDone 
-                  ? `${readyCount} ${outputType}s ready in ${formatTime(elapsedSeconds)}`
-                  : `Step ${completedSteps} of ${nodes.length}`
+                  ? `${readyCount} proven variations in ${formatTime(elapsedSeconds)}`
+                  : activeNode?.id === "research" 
+                    ? "Finding viral patterns..."
+                    : `Step ${completedSteps} of ${nodes.length}`
                 }
               </p>
             </div>
@@ -302,20 +341,25 @@ export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
             {!allDone && estimatedRemaining > 0 && (
               <p className="text-xs text-[#6B7A8F]">~{formatTime(estimatedRemaining)} left</p>
             )}
-            {estimatedCost > 0 && allDone && (
-              <p className="text-xs text-[#2EE6C9] font-medium">{formatCost(estimatedCost)}</p>
+            {allDone && (
+              <p className="text-xs text-[#2EE6C9] font-medium">Built from viral data ✓</p>
             )}
           </div>
         </div>
 
         {/* Progress bar */}
         {!allDone && (
-          <div className="h-1 bg-[#1C2230] rounded-full overflow-hidden">
+          <div className="h-1.5 bg-[#1C2230] rounded-full overflow-hidden">
             <div 
-              className="h-full bg-gradient-to-r from-[#2EE6C9] to-[#0095FF] rounded-full transition-all duration-500"
+              className="h-full bg-gradient-to-r from-[#A855F7] via-[#0095FF] to-[#2EE6C9] rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(0,149,255,0.5)]"
               style={{ width: `${progress}%` }}
             />
           </div>
+        )}
+
+        {/* Completion bar */}
+        {allDone && (
+          <div className="h-1.5 bg-[#2EE6C9] rounded-full shadow-[0_0_10px_rgba(46,230,201,0.5)]" />
         )}
       </div>
 
@@ -344,6 +388,9 @@ export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
           </span>
         )}
       </div>
+
+      {/* Live Pipeline Feed - Text diagram showing content flowing through */}
+      <PipelineFeed clips={clips} batch={batch} />
     </div>
   );
 }

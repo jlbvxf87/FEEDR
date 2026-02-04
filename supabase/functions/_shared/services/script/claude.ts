@@ -7,6 +7,14 @@ import {
   ScriptGenerationParams,
   SCRIPT_SYSTEM_PROMPT 
 } from "./interface.ts";
+import {
+  getScriptPromptConstraints,
+  validateScriptTiming,
+  validateOverlayTiming,
+  SCRIPT_CONSTRAINTS,
+  VIDEO_DURATION,
+} from "../../timing.ts";
+import { validateSoraPrompt, enhanceSoraPrompt } from "../../quality.ts";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 
@@ -25,27 +33,46 @@ export class ClaudeScriptService implements ScriptService {
   }
 
   async generateScript(params: ScriptGenerationParams): Promise<ScriptOutput> {
-    const { intent_text, preset_key, mode, variant_index, batch_size } = params;
+    const { intent_text, preset_key, mode, variant_index, batch_size, research_context } = params;
+    
+    // Build research section if available from Apify scraping
+    let researchSection = "";
+    if (research_context?.research_summary) {
+      researchSection = `
+═══════════════════════════════════════════════════════════════
+🔬 RESEARCH INSIGHTS (from ${research_context.scraped_videos?.length || 0} viral examples):
+${research_context.research_summary}
+═══════════════════════════════════════════════════════════════
+Use these real patterns as inspiration. The top performers in this niche use these exact approaches.
+`;
+    }
+    
+    const timingConstraints = getScriptPromptConstraints();
     
     const userPrompt = `Generate variant ${variant_index + 1} of ${batch_size} for a short-form video.
 
 Topic/Intent: ${intent_text}
 Visual Style Preset: ${preset_key}
 Test Mode: ${mode}
+${researchSection}
+${timingConstraints}
 
-Requirements:
+CONTENT REQUIREMENTS:
 - Each variant should have a DIFFERENT hook approach
 - Variant ${variant_index + 1} should use a unique hook style
-- Keep the script authentic and engaging (15-30 seconds when spoken)
-- Include 4-6 on-screen text overlays at key moments
+${research_context?.trend_analysis?.recommended_hooks ? `- Inspired by these proven hooks: ${research_context.trend_analysis.recommended_hooks.slice(0, 2).map(h => `"${h.hook}"`).join(", ")}` : ''}
+- Script MUST be 30-38 words (this is CRITICAL - count carefully!)
+- Include 4-5 on-screen text overlays (timestamps 0-12 seconds only)
 
 Return ONLY valid JSON with this exact structure:
 {
-  "script_spoken": "The full script to be spoken by the creator",
+  "script_spoken": "The full script - MUST be 30-38 words exactly",
   "on_screen_text_json": [
     {"t": 0, "text": "Hook text"},
-    {"t": 2.5, "text": "Second overlay"},
-    {"t": 5, "text": "Third overlay"}
+    {"t": 3, "text": "Key point"},
+    {"t": 6, "text": "Support"},
+    {"t": 9, "text": "CTA"},
+    {"t": 12, "text": "Final"}
   ],
   "sora_prompt": "A detailed prompt for AI video generation describing the visual scene"
 }`;
@@ -91,6 +118,42 @@ Return ONLY valid JSON with this exact structure:
       // Validate output structure
       if (!parsed.script_spoken || !parsed.on_screen_text_json || !parsed.sora_prompt) {
         throw new Error("Invalid response structure from Claude");
+      }
+
+      // Validate and log timing
+      const timing = validateScriptTiming(parsed.script_spoken);
+      console.log(`[Script] Word count: ${timing.wordCount}, Est. duration: ${timing.estimatedDuration}s`);
+      
+      if (!timing.isValid) {
+        console.warn(`[Script] Timing issues: ${timing.issues.join(", ")}`);
+        // If script is too long, truncate to safe word count
+        if (timing.wordCount > SCRIPT_CONSTRAINTS.MAX_WORDS) {
+          const words = parsed.script_spoken.split(/\s+/);
+          const truncated = words.slice(0, SCRIPT_CONSTRAINTS.TARGET_WORDS).join(" ");
+          console.log(`[Script] Truncated from ${timing.wordCount} to ${SCRIPT_CONSTRAINTS.TARGET_WORDS} words`);
+          parsed.script_spoken = truncated + "...";
+        }
+      }
+
+      // Validate and adjust overlay timing to fit within video duration
+      const adjustedOverlays = validateOverlayTiming(
+        parsed.on_screen_text_json, 
+        VIDEO_DURATION.TARGET
+      );
+      parsed.on_screen_text_json = adjustedOverlays.map(({ t, text }) => ({ t, text }));
+
+      // QUALITY GATE: Validate and enhance Sora prompt
+      const soraValidation = validateSoraPrompt(parsed.sora_prompt, preset_key);
+      console.log(`[Script] Sora prompt quality: ${soraValidation.score}/100`);
+      
+      if (soraValidation.score < 70) {
+        console.log(`[Script] Enhancing Sora prompt (was ${soraValidation.score}/100)`);
+        parsed.sora_prompt = enhanceSoraPrompt(parsed.sora_prompt, preset_key);
+        console.log(`[Script] Enhanced prompt: ${parsed.sora_prompt.substring(0, 100)}...`);
+      }
+      
+      if (soraValidation.warnings.length > 0) {
+        console.warn(`[Script] Sora prompt warnings: ${soraValidation.warnings.join(", ")}`);
       }
 
       return parsed;

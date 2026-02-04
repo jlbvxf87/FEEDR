@@ -3,6 +3,7 @@
 
 import { AssemblyService, AssemblyOutput, AssemblyParams, OverlayConfig } from "./interface.ts";
 import { uploadVideo, downloadFile } from "../../storage.ts";
+import { VIDEO_DURATION, validateOverlayTiming } from "../../timing.ts";
 
 export class FFmpegAssemblyService implements AssemblyService {
   readonly name = "ffmpeg";

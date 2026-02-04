@@ -34,8 +34,164 @@ interface GenerateBatchRequest {
   estimated_cost?: number; // User charge in cents (already includes upsell)
 }
 
-// Simple AUTO preset resolver
+// =============================================================================
+// METHOD DETECTION PATTERNS - Smart AUTO analyzes prompt to pick best method
+// =============================================================================
+
+const METHOD_DETECTION_PATTERNS: Record<string, { keywords: string[]; intent: string[] }> = {
+  FOUNDERS: {
+    keywords: ["founder", "ceo", "built", "company", "startup", "learned", "years", "mistake", "lost", "made", "business", "entrepreneur", "raised", "sold", "scaled"],
+    intent: ["authority", "experience", "business advice", "lessons", "wisdom", "mentor"]
+  },
+  PODCAST: {
+    keywords: ["opinion", "think", "hot take", "unpopular", "debate", "disagree", "actually", "controversial", "honestly", "truth is"],
+    intent: ["reaction", "commentary", "discussion", "controversial", "perspective"]
+  },
+  DISCOVERY: {
+    keywords: ["found", "discovered", "realize", "nobody", "secret", "hidden", "hack", "trick", "just learned", "did you know", "turns out", "apparently"],
+    intent: ["revelation", "surprise", "education", "tip", "insight", "breakthrough"]
+  },
+  CAMERA_PUT_DOWN: {
+    keywords: ["quick", "real quick", "listen", "need to", "stop", "wait", "urgent", "important", "right now", "immediately"],
+    intent: ["urgent", "casual", "authentic", "raw", "breaking", "news"]
+  },
+  SENSORY: {
+    keywords: ["satisfying", "texture", "asmr", "watch", "look at", "beautiful", "mesmerizing", "soothing", "calming", "relaxing", "smooth"],
+    intent: ["visual", "sensory", "relaxing", "aesthetic", "oddly satisfying"]
+  },
+  DELAYED_GRATIFICATION: {
+    keywords: ["wait for it", "watch until", "the end", "worth it", "reveal", "transformation", "before and after", "result", "outcome", "payoff"],
+    intent: ["suspense", "payoff", "before/after", "buildup", "transformation"]
+  }
+};
+
+// Method configurations for structured prompts
+const METHOD_CONFIGS: Record<string, {
+  hook_formula: string;
+  pacing: string;
+  structure: string[];
+  tone: string;
+  visual_direction: string;
+}> = {
+  FOUNDERS: {
+    hook_formula: "Authority statement + personal stake",
+    pacing: "Measured, confident. Let points land.",
+    structure: ["[0-3s] Hook with credibility/stakes", "[3-10s] Insight or contrarian take", "[10-20s] Proof/example", "[20-25s] Viewer takeaway"],
+    tone: "Authoritative but approachable. Mentor energy.",
+    visual_direction: "Professional setting, stable shot, confident posture"
+  },
+  PODCAST: {
+    hook_formula: "Hot take or opinion that demands response",
+    pacing: "Conversational, natural pauses for emphasis",
+    structure: ["[0-2s] Bold hot take", "[2-10s] Your reasoning", "[10-18s] Evidence/example", "[18-22s] Challenge to viewer"],
+    tone: "Opinionated but not aggressive. Inviting debate.",
+    visual_direction: "Talking head, expressive, could be split-screen"
+  },
+  DISCOVERY: {
+    hook_formula: "Curiosity gap - 'I just found out...'",
+    pacing: "Building excitement. Start curious, end amazed.",
+    structure: ["[0-2s] Curiosity hook", "[2-8s] Discovery context", "[8-15s] The reveal", "[15-20s] Why it matters"],
+    tone: "Genuinely surprised, sharing something exciting.",
+    visual_direction: "Casual setting, authentic reactions, natural lighting"
+  },
+  CAMERA_PUT_DOWN: {
+    hook_formula: "Mid-sentence start, already in motion",
+    pacing: "Fast, urgent, no filler. Get to point immediately.",
+    structure: ["[0-1s] Already mid-thought", "[1-8s] The point directly", "[8-12s] Quick proof", "[12-15s] Rapid CTA"],
+    tone: "Urgent, casual, caught-in-the-moment.",
+    visual_direction: "Handheld shake, messy authentic environment"
+  },
+  SENSORY: {
+    hook_formula: "Visual intrigue - 'Watch this...'",
+    pacing: "Slow, deliberate, ASMR-like. Let visuals breathe.",
+    structure: ["[0-3s] Visual hook", "[3-12s] Slow reveal", "[12-18s] Peak satisfaction", "[18-22s] Soft close"],
+    tone: "Calm, meditative. Let visuals do the work.",
+    visual_direction: "Extreme close-ups, textures, macro-style"
+  },
+  DELAYED_GRATIFICATION: {
+    hook_formula: "Tease the payoff - 'Wait for it...'",
+    pacing: "Tension building. Each beat raises stakes.",
+    structure: ["[0-3s] Tease payoff", "[3-10s] Setup/before state", "[10-18s] Building tension", "[18-25s] The reveal"],
+    tone: "Building anticipation. Make them NEED to see end.",
+    visual_direction: "Dynamic, before/after framing, cinematic reveal"
+  }
+};
+
+/**
+ * Smart AUTO detection - analyzes user prompt to pick the best method
+ * Scores each method based on keyword/intent matches
+ */
+function detectMethodFromPrompt(intentText: string): string {
+  const text = intentText.toLowerCase();
+  const scores: Record<string, number> = {};
+  
+  for (const [method, patterns] of Object.entries(METHOD_DETECTION_PATTERNS)) {
+    scores[method] = 0;
+    
+    // Keyword matches (higher weight)
+    for (const keyword of patterns.keywords) {
+      if (text.includes(keyword)) {
+        scores[method] += 2;
+      }
+    }
+    
+    // Intent matches (lower weight)
+    for (const intent of patterns.intent) {
+      if (text.includes(intent)) {
+        scores[method] += 1;
+      }
+    }
+  }
+  
+  // Find highest scoring method
+  const entries = Object.entries(scores);
+  const best = entries.reduce((a, b) => (b[1] > a[1] ? b : a), entries[0]);
+  
+  // If no strong match, default to FOUNDERS (most versatile)
+  return best[1] > 0 ? best[0] : "FOUNDERS";
+}
+
+/**
+ * Build structured JSON prompt for better worker communication
+ * Converts user's raw input into clear, organized instructions
+ */
+function buildStructuredPrompt(
+  intentText: string,
+  method: string,
+  mode: string,
+  variantIndex: number,
+  batchSize: number
+): object {
+  const config = METHOD_CONFIGS[method] || METHOD_CONFIGS.FOUNDERS;
+  
+  return {
+    // User's original input
+    raw_intent: intentText,
+    
+    // Parsed topic (could be enhanced with NLP later)
+    topic: intentText.trim(),
+    
+    // Detected or selected method
+    method: method,
+    
+    // Method-specific guidance
+    method_config: config,
+    
+    // Generation context
+    context: {
+      variant_number: variantIndex + 1,
+      total_variants: batchSize,
+      test_mode: mode,
+      target_duration_sec: 20 // Default target
+    }
+  };
+}
+
+/**
+ * Smart AUTO preset resolver - picks best method for video/image
+ */
 function resolvePreset(intentText: string, requestedPreset: string, outputType: OutputType): string {
+  // If user selected a specific method, use it
   if (requestedPreset !== "AUTO") {
     return requestedPreset;
   }
@@ -60,17 +216,8 @@ function resolvePreset(intentText: string, requestedPreset: string, outputType: 
     return "PRODUCT_CLEAN";
   }
   
-  // For videos (existing logic)
-  const lowerIntent = intentText.toLowerCase();
-  const adKeywords = ["buy", "sale", "offer", "discount", "quiz", "cta", "shop", "order", "deal"];
-  
-  for (const keyword of adKeywords) {
-    if (lowerIntent.includes(keyword)) {
-      return "TIKTOK_AD_V1";
-    }
-  }
-  
-  return "RAW_UGC_V1";
+  // For videos, use smart method detection
+  return detectMethodFromPrompt(intentText);
 }
 
 // Generate variant ID (V01, V02, etc.)
@@ -285,14 +432,30 @@ serve(async (req) => {
       const { error: jobError } = await supabase.from("jobs").insert(imageJobs);
       if (jobError) throw new Error(`Failed to create jobs: ${jobError.message}`);
     } else {
-      // Standard flow - create compile job
-      const jobType = output_type === "image" ? "image_compile" : "compile";
+      // NEW FLOW: Start with RESEARCH job (Claude brain + Apify scraping)
+      // research → compile → tts → video → assemble
+      
+      // Build structured prompt for better worker communication
+      const structuredPrompt = buildStructuredPrompt(
+        intent_text,
+        resolvedPreset,
+        mode,
+        0, // Will be updated per variant in worker
+        batch_size
+      );
+      
+      // Check if research is enabled (Apify token present)
+      const researchEnabled = Deno.env.get("APIFY_API_TOKEN") || Deno.env.get("ANTHROPIC_API_KEY");
+      
+      // Job type: research first if enabled, otherwise skip to compile
+      const initialJobType = researchEnabled ? "research" : (output_type === "image" ? "image_compile" : "compile");
+      
       const { error: jobError } = await supabase
         .from("jobs")
         .insert({
           batch_id: batch.id,
           clip_id: null,
-          type: jobType,
+          type: initialJobType,
           status: "queued",
           payload_json: { 
             intent_text, 
@@ -302,9 +465,13 @@ serve(async (req) => {
             image_type,
             aspect_ratio,
             image_pack,
+            // Structured prompt for worker
+            structured_prompt: structuredPrompt,
           },
         });
       if (jobError) throw new Error(`Failed to create job: ${jobError.message}`);
+      
+      console.log(`Created ${initialJobType} job for batch ${batch.id}`);
     }
 
     // Return batch_id with billing info

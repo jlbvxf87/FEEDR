@@ -5,7 +5,8 @@ import {
   ResearchService, 
   ScrapedVideo, 
   TrendAnalysis, 
-  ResearchParams 
+  ResearchParams,
+  ContentCategory,
 } from "./interface.ts";
 
 // Mock scraped videos
@@ -75,7 +76,7 @@ export class MockResearchService implements ResearchService {
     }));
   }
 
-  async analyzeVideos(query: string, videos: ScrapedVideo[]): Promise<TrendAnalysis> {
+  async analyzeVideos(query: string, videos: ScrapedVideo[], category?: ContentCategory): Promise<TrendAnalysis> {
     // Simulate API delay
     await new Promise((resolve) => setTimeout(resolve, 300 + Math.random() * 400));
     

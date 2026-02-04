@@ -28,7 +28,6 @@ import { ShotstackAssemblyService } from "./assembly/shotstack.ts";
 // Import image implementations
 import { MockImageService } from "./image/mock.ts";
 import { DalleImageService } from "./image/dalle.ts";
-import { FluxImageService } from "./image/flux.ts";
 
 // Service type identifiers
 export type ServiceType = "script" | "voice" | "video" | "image" | "assembly" | "research";
@@ -37,7 +36,7 @@ export type ServiceType = "script" | "voice" | "video" | "image" | "assembly" | 
 export type ScriptServiceName = "mock" | "openai" | "claude";
 export type VoiceServiceName = "mock" | "elevenlabs" | "openai";
 export type VideoServiceName = "mock" | "sora";
-export type ImageServiceName = "mock" | "dalle" | "flux" | "midjourney";
+export type ImageServiceName = "mock" | "dalle";
 export type AssemblyServiceName = "mock" | "ffmpeg" | "shotstack";
 export type ResearchServiceName = "mock" | "apify";
 
@@ -182,12 +181,6 @@ export class ServiceRegistry {
   private createImageService(name: ImageServiceName): ImageService {
     switch (name) {
       case "dalle":
-        return new DalleImageService();
-      case "flux":
-        return new FluxImageService();
-      case "midjourney":
-        // Midjourney doesn't have a direct API, would need a proxy service
-        console.warn("Midjourney not directly supported, falling back to DALL-E");
         return new DalleImageService();
       case "mock":
       default:

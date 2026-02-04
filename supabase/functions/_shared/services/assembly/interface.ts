@@ -53,6 +53,8 @@ export interface AssemblyParams {
   on_screen_text_json: Array<{ t: number; text: string }>;
   preset_key: string;
   overlay_config: OverlayConfig;
+  /** Video duration in seconds (default: 15, Sora max) */
+  duration_sec?: number;
 }
 
 export interface AssemblyService {
@@ -68,8 +70,64 @@ export interface AssemblyService {
   assembleVideo(params: AssemblyParams): Promise<AssemblyOutput>;
 }
 
-// Default overlay configs per preset
-export const PRESET_OVERLAY_CONFIGS: Record<string, OverlayConfig> = {
+// =============================================================================
+// METHOD OVERLAY CONFIGS - Tuned zoom/caption settings per content method
+// Each method's energy and pacing reflected in overlay timing
+// =============================================================================
+
+export const METHOD_OVERLAY_CONFIGS: Record<string, OverlayConfig> = {
+  // PRIMARY METHODS (creator-familiar names)
+  
+  FOUNDERS: {
+    // Professional, measured - subtle enhancements that don't distract
+    captions: { enabled: true, animation: "fade", position: "bottom", fontSize: 32 },
+    fake_comments: { enabled: false },
+    progress_bar: { enabled: false },
+    zoom: { enabled: true, cadence_sec: 5, min: 1.0, max: 1.05 }, // Subtle, professional
+  },
+  
+  PODCAST: {
+    // Conversational rhythm - captions follow natural speech patterns
+    captions: { enabled: true, animation: "pop", position: "center", fontSize: 36 },
+    fake_comments: { enabled: false },
+    progress_bar: { enabled: false },
+    zoom: { enabled: true, cadence_sec: 3, min: 1.0, max: 1.08 }, // Conversational rhythm
+  },
+  
+  DISCOVERY: {
+    // Building excitement - faster reveals, typewriter for anticipation
+    captions: { enabled: true, animation: "typewriter", position: "center", fontSize: 38 },
+    fake_comments: { enabled: false },
+    progress_bar: { enabled: false },
+    zoom: { enabled: true, cadence_sec: 2.5, min: 1.0, max: 1.12 }, // Building excitement
+  },
+  
+  CAMERA_PUT_DOWN: {
+    // Fast, urgent - aggressive zoom, punchy captions
+    captions: { enabled: true, animation: "pop", position: "center", fontSize: 42 },
+    fake_comments: { enabled: false },
+    progress_bar: { enabled: false },
+    zoom: { enabled: true, cadence_sec: 1.5, min: 1.0, max: 1.15 }, // Fast, energetic
+  },
+  
+  SENSORY: {
+    // Slow, dramatic - let visuals breathe, subtle text
+    captions: { enabled: true, animation: "fade", position: "bottom", fontSize: 28 },
+    fake_comments: { enabled: false },
+    progress_bar: { enabled: false },
+    zoom: { enabled: true, cadence_sec: 8, min: 1.0, max: 1.25 }, // Slow, dramatic
+  },
+  
+  DELAYED_GRATIFICATION: {
+    // Tension building - progress bar shows journey to payoff
+    captions: { enabled: true, animation: "typewriter", position: "center", fontSize: 36 },
+    fake_comments: { enabled: false },
+    progress_bar: { enabled: true, position: "top" }, // Shows progress to payoff
+    zoom: { enabled: true, cadence_sec: 2, min: 1.0, max: 1.1 }, // Tension building
+  },
+
+  // LEGACY PRESETS (backwards compatibility)
+  
   RAW_UGC_V1: {
     captions: { enabled: true, animation: "pop", position: "center" },
     fake_comments: { enabled: false },
@@ -119,3 +177,14 @@ export const PRESET_OVERLAY_CONFIGS: Record<string, OverlayConfig> = {
     zoom: { enabled: false },
   },
 };
+
+// Legacy export for backwards compatibility
+export const PRESET_OVERLAY_CONFIGS = METHOD_OVERLAY_CONFIGS;
+
+/**
+ * Get overlay config for a method/preset key
+ * Falls back to FOUNDERS if not found
+ */
+export function getOverlayConfig(methodKey: string): OverlayConfig {
+  return METHOD_OVERLAY_CONFIGS[methodKey] || METHOD_OVERLAY_CONFIGS.FOUNDERS;
+}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { Preset, PresetKey } from "@/lib/types";
-import { Check } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 
 interface PresetGridProps {
   presets: Preset[];
@@ -12,9 +12,20 @@ interface PresetGridProps {
   disabled?: boolean;
 }
 
-// Brand-aligned gradient backgrounds using CSS variables
+// Brand-aligned gradient backgrounds - Methods first, then legacy
 const gradientClasses: Record<string, string> = {
+  // AUTO - Smart detection (teal gradient)
   AUTO: "from-[#2EE6C9] to-[#1FB6FF]",
+  
+  // NEW METHODS (creator-familiar names)
+  FOUNDERS: "from-[#3B82F6] to-[#1D4ED8]",           // Blue - Authority
+  PODCAST: "from-[#8B5CF6] to-[#6D28D9]",           // Purple - Conversation
+  DISCOVERY: "from-[#F59E0B] to-[#D97706]",         // Amber - Curiosity
+  CAMERA_PUT_DOWN: "from-[#EF4444] to-[#B91C1C]",   // Red - Urgency
+  SENSORY: "from-[#10B981] to-[#059669]",           // Emerald - Calm
+  DELAYED_GRATIFICATION: "from-[#EC4899] to-[#BE185D]", // Pink - Anticipation
+  
+  // LEGACY PRESETS (backwards compatibility)
   RAW_UGC_V1: "from-[#F59E0B] to-[#EA580C]",
   TIKTOK_AD_V1: "from-[#FF4D4F] to-[#E11D48]",
   PODCAST_V1: "from-[#3A7CFF] to-[#2563EB]",
@@ -92,12 +103,20 @@ export function PresetGrid({
             {/* Dark overlay */}
             <div className="absolute inset-0 bg-black/40" />
 
+            {/* AUTO badge - smart detection indicator */}
+            {preset.key === "AUTO" && (
+              <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/30 backdrop-blur-sm px-1.5 py-0.5 rounded-full">
+                <Sparkles className="w-2.5 h-2.5 text-[var(--feedr-teal)]" />
+                <span className="text-[10px] text-white/80 font-medium">SMART</span>
+              </div>
+            )}
+
             {/* Content */}
             <div className="absolute inset-0 flex flex-col items-center justify-center p-3">
-              <span className="text-white font-semibold text-sm uppercase tracking-wider text-center">
+              <span className="text-white font-semibold text-sm uppercase tracking-wider text-center leading-tight">
                 {preset.name}
               </span>
-              <span className="text-white/60 text-xs text-center mt-1.5 line-clamp-2">
+              <span className="text-white/60 text-xs text-center mt-1.5 line-clamp-2 leading-tight">
                 {preset.description}
               </span>
             </div>

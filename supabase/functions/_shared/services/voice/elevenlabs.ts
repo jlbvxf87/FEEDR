@@ -3,6 +3,7 @@
 
 import { VoiceService, VoiceOutput, VoiceGenerationParams, VOICE_PRESETS } from "./interface.ts";
 import { uploadAudio } from "../../storage.ts";
+import { VOICE_TIMING, VIDEO_DURATION, validateScriptTiming } from "../../timing.ts";
 
 const ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1";
 
@@ -29,6 +30,14 @@ export class ElevenLabsVoiceService implements VoiceService {
 
   async generateVoice(params: VoiceGenerationParams): Promise<VoiceOutput> {
     const { script, clip_id, voice_id, speed = 1.0 } = params;
+    
+    // Pre-flight timing check
+    const timing = validateScriptTiming(script);
+    console.log(`[Voice] Generating for ${timing.wordCount} words, est. ${timing.estimatedDuration}s`);
+    
+    if (timing.estimatedDuration > VIDEO_DURATION.MAX) {
+      console.warn(`[Voice] WARNING: Script may exceed ${VIDEO_DURATION.MAX}s video limit (est. ${timing.estimatedDuration}s)`);
+    }
     
     // Use provided voice_id or default
     const selectedVoiceId = voice_id || VOICE_PRESETS.default.elevenlabs;
@@ -66,9 +75,15 @@ export class ElevenLabsVoiceService implements VoiceService {
       // Upload to Supabase Storage
       const voice_url = await uploadAudio(clip_id, audioData);
       
-      // Estimate duration (roughly 150 words per minute)
-      const wordCount = script.split(/\s+/).length;
-      const duration_seconds = Math.round((wordCount / 150) * 60 / speed);
+      // Calculate duration using our timing constants
+      // ElevenLabs turbo_v2 tends to speak slightly faster (~160 WPM)
+      const wordCount = script.split(/\s+/).filter(w => w.length > 0).length;
+      const estimatedDuration = Math.round((wordCount / VOICE_TIMING.WORDS_PER_MINUTE) * 60 / speed);
+      
+      // Clamp to video duration to prevent mismatch
+      const duration_seconds = Math.min(estimatedDuration, VIDEO_DURATION.MAX);
+      
+      console.log(`[Voice] Generated ${wordCount} words → ${estimatedDuration}s estimated (clamped to ${duration_seconds}s)`);
 
       return {
         voice_url,

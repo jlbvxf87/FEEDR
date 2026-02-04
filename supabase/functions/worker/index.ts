@@ -8,6 +8,17 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { getServices } from "../_shared/services/index.ts";
 import { PRESET_OVERLAY_CONFIGS } from "../_shared/services/assembly/interface.ts";
+import type { TrendAnalysis, ScrapedVideo, ContentCategory } from "../_shared/services/research/interface.ts";
+import { detectCategory, CATEGORY_DETECTION, getViralThreshold } from "../_shared/services/research/interface.ts";
+import { VIDEO_DURATION, SCRIPT_CONSTRAINTS } from "../_shared/timing.ts";
+import { 
+  classifyError, 
+  preFlightVideoCheck, 
+  validateSoraPrompt, 
+  enhanceSoraPrompt,
+  validateVariationDiversity,
+  estimateBatchCost,
+} from "../_shared/quality.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -190,6 +201,9 @@ serve(async (req) => {
       await withTimeout(
         (async () => {
           switch (job.type) {
+            case "research":
+              await handleResearchJob(supabase, job, services);
+              break;
             case "compile":
               await handleCompileJob(supabase, job, services);
               break;
@@ -256,50 +270,64 @@ serve(async (req) => {
       
       console.error(`Job ${job.id} error:`, jobError.message);
       
-      // Determine if we should retry or fail permanently
-      // Note: attempts was already incremented by claim_next_job
-      const shouldRetry = job.attempts < MAX_RETRIES;
+      // SMART RETRY: Classify error to determine if we should retry
+      const errorClassification = classifyError(jobError);
+      console.log(`[Error] Type: ${errorClassification.type}, Should retry: ${errorClassification.shouldRetry}`);
+      console.log(`[Error] Suggested action: ${errorClassification.suggestedAction}`);
       
-      if (shouldRetry) {
+      // Determine if we should retry:
+      // 1. Error must be retryable (not policy violation, not budget issue)
+      // 2. We must have retries remaining
+      const canRetry = errorClassification.shouldRetry && job.attempts < MAX_RETRIES;
+      
+      if (canRetry) {
         // Put back in queue for retry
+        const retryMessage = `[${errorClassification.type}] Attempt ${job.attempts} failed: ${jobError.message}`;
         await supabase.rpc("complete_job", {
           p_job_id: job.id,
           p_status: "queued",
-          p_error: `Attempt ${job.attempts} failed: ${jobError.message}`,
+          p_error: retryMessage,
         }).catch(() => {
           return supabase
             .from("jobs")
             .update({ 
               status: "queued", 
-              error: `Attempt ${job.attempts} failed: ${jobError.message}`,
+              error: retryMessage,
               updated_at: new Date().toISOString()
             })
             .eq("id", job.id);
         });
+        console.log(`[Retry] Job ${job.id} queued for retry (attempt ${job.attempts + 1})`);
       } else {
-        // Mark as permanently failed
+        // Mark as permanently failed - no more retries
+        const failReason = errorClassification.shouldRetry 
+          ? `Max retries exceeded: ${jobError.message}`
+          : `[${errorClassification.type}] ${errorClassification.suggestedAction}: ${jobError.message}`;
+          
         await supabase.rpc("complete_job", {
           p_job_id: job.id,
           p_status: "failed",
-          p_error: jobError.message,
+          p_error: failReason,
         }).catch(() => {
           return supabase
             .from("jobs")
             .update({ 
               status: "failed", 
-              error: jobError.message,
+              error: failReason,
               updated_at: new Date().toISOString()
             })
             .eq("id", job.id);
         });
         
-        // Mark clip as failed
+        // Mark clip as failed with actionable message
         if (job.clip_id) {
           await supabase.from("clips").update({ 
             status: "failed", 
-            error: jobError.message 
+            error: failReason 
           }).eq("id", job.clip_id);
         }
+        
+        console.log(`[Failed] Job ${job.id} permanently failed: ${failReason}`);
       }
       
       // Log the error
@@ -335,9 +363,37 @@ serve(async (req) => {
 });
 
 // Handle compile job - generates scripts for all clips using AI service
+// NOW ENHANCED with research context from the research job
 async function handleCompileJob(supabase: any, job: any, services: ReturnType<typeof getServices>) {
-  const { intent_text, preset_key, mode } = job.payload_json;
+  const { intent_text, preset_key, mode, research_context } = job.payload_json;
   const scriptService = services.getScriptService();
+  
+  // ═══════════════════════════════════════════════════════════════
+  // COST ESTIMATION: Log estimated costs before expensive operations
+  // ═══════════════════════════════════════════════════════════════
+  const { data: batchInfo } = await supabase
+    .from("batches")
+    .select("batch_size")
+    .eq("id", job.batch_id)
+    .single();
+    
+  const batchSize = batchInfo?.batch_size || 4;
+  const costEstimate = estimateBatchCost({
+    batchSize,
+    outputType: "video",
+    withResearch: !!research_context,
+  });
+  
+  console.log(`[Compile] ═══════════════════════════════════════════`);
+  console.log(`[Compile] Batch size: ${batchSize} variations`);
+  console.log(`[Compile] Estimated total cost: $${costEstimate.total.toFixed(2)}`);
+  console.log(`[Compile] Breakdown: ${JSON.stringify(costEstimate.breakdown)}`);
+  console.log(`[Compile] ═══════════════════════════════════════════`);
+  
+  // Log if we have research context
+  if (research_context?.research_summary) {
+    console.log(`[Compile] Using research context with ${research_context.scraped_videos?.length || 0} viral examples`);
+  }
   
   // Get all clips for this batch
   const { data: clips, error } = await supabase
@@ -349,6 +405,9 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
   if (error) throw error;
   if (!clips || clips.length === 0) throw new Error("No clips found for batch");
 
+  // Track generated scripts for diversity check
+  const generatedScripts: string[] = [];
+
   // Process each clip
   for (let i = 0; i < clips.length; i++) {
     const clip = clips[i];
@@ -356,6 +415,7 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
     // IDEMPOTENCY: Skip clips that already have scripts (from previous partial run)
     if (clip.script_spoken && clip.status !== "planned") {
       console.log(`Clip ${clip.id} already has script, skipping generation`);
+      generatedScripts.push(clip.script_spoken);
       // Still ensure TTS job exists
       await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "tts", { 
         script: clip.script_spoken 
@@ -370,6 +430,7 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
       .eq("id", clip.id);
     
     // Generate script using AI service with timeout
+    // Include research context if available from research job
     const scriptOutput = await withTimeout(
       scriptService.generateScript({
         intent_text,
@@ -377,12 +438,16 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
         mode,
         variant_index: i,
         batch_size: clips.length,
+        research_context: research_context || undefined,
       }),
       30000, // 30s timeout for script generation
       "Script generation"
     );
     
     const { script_spoken, on_screen_text_json, sora_prompt } = scriptOutput;
+    
+    // Track for diversity check
+    generatedScripts.push(script_spoken);
     
     // Update clip with script data and track service used
     await supabase
@@ -400,6 +465,23 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
     await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "tts", { 
       script: script_spoken 
     });
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // A/B TEST QUALITY: Validate script diversity
+  // Ensures we're not wasting money on near-duplicate variations
+  // ═══════════════════════════════════════════════════════════════
+  if (generatedScripts.length > 1) {
+    const diversityCheck = validateVariationDiversity(generatedScripts);
+    console.log(`[Compile] Variation diversity score: ${diversityCheck.diversityScore}/100`);
+    
+    if (!diversityCheck.isValid) {
+      console.warn(`[Compile] ⚠️ Low diversity warning: ${diversityCheck.issues.join(", ")}`);
+      console.warn(`[Compile] A/B test may not produce meaningful insights`);
+      // Don't block - but log for monitoring. Future: could trigger regeneration
+    } else {
+      console.log(`[Compile] ✓ Good variation diversity for A/B testing`);
+    }
   }
 }
 
@@ -463,10 +545,10 @@ async function handleTtsJob(supabase: any, job: any, services: ReturnType<typeof
 async function handleVideoJob(supabase: any, job: any, services: ReturnType<typeof getServices>) {
   const videoService = services.getVideoService();
   
-  // Get clip details
+  // Get clip details including script for quality check
   const { data: clip, error: clipError } = await supabase
     .from("clips")
-    .select("sora_prompt, raw_video_url")
+    .select("sora_prompt, raw_video_url, script_spoken, preset_key")
     .eq("id", job.clip_id)
     .single();
   
@@ -478,16 +560,50 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
   let duration_seconds = job.payload_json.duration_seconds || 15;
   
   if (!raw_video_url) {
+    // ═══════════════════════════════════════════════════════════════
+    // QUALITY GATE: Pre-flight check before expensive Sora generation
+    // This prevents wasting money on low-quality prompts
+    // ═══════════════════════════════════════════════════════════════
+    const soraValidation = validateSoraPrompt(clip.sora_prompt, clip.preset_key);
+    console.log(`[Video] Sora prompt quality: ${soraValidation.score}/100`);
+    
+    let finalPrompt = clip.sora_prompt;
+    
+    // If prompt quality is below threshold, enhance it
+    if (soraValidation.score < 60) {
+      console.log(`[Video] Enhancing low-quality prompt (score: ${soraValidation.score})`);
+      finalPrompt = enhanceSoraPrompt(clip.sora_prompt, clip.preset_key);
+      
+      // Update clip with enhanced prompt for transparency
+      await supabase
+        .from("clips")
+        .update({ sora_prompt: finalPrompt })
+        .eq("id", job.clip_id);
+        
+      console.log(`[Video] Enhanced prompt saved to clip`);
+    }
+    
+    // Log any warnings (but don't block)
+    if (soraValidation.warnings.length > 0) {
+      console.warn(`[Video] Prompt warnings: ${soraValidation.warnings.join(", ")}`);
+    }
+    
+    // If there are critical issues (score < 40), this is likely to fail
+    if (soraValidation.score < 40) {
+      console.error(`[Video] Prompt quality critically low (${soraValidation.score}/100). Issues: ${soraValidation.issues.join(", ")}`);
+      // Don't block, but log for monitoring
+    }
+    
     // Update clip status to rendering
     await supabase
       .from("clips")
       .update({ status: "rendering" })
       .eq("id", job.clip_id);
     
-    // Generate video using AI service
+    // Generate video using AI service with validated/enhanced prompt
     const result = await withTimeout(
       videoService.generateVideo({
-        prompt: clip.sora_prompt,
+        prompt: finalPrompt,
         clip_id: job.clip_id,
         duration: duration_seconds,
         aspect_ratio: "9:16",
@@ -546,6 +662,10 @@ async function handleAssembleJob(supabase: any, job: any, services: ReturnType<t
   // Get overlay config for preset
   const overlayConfig = PRESET_OVERLAY_CONFIGS[clip.preset_key] || PRESET_OVERLAY_CONFIGS.RAW_UGC_V1;
   
+  // Get video duration from job payload (passed from video job) or default to 15s
+  const videoDuration = job.payload_json?.duration_seconds || 15;
+  console.log(`[Assemble] Using video duration: ${videoDuration}s`);
+  
   // Assemble final video
   const { final_url, duration_seconds } = await withTimeout(
     assemblyService.assembleVideo({
@@ -555,6 +675,7 @@ async function handleAssembleJob(supabase: any, job: any, services: ReturnType<t
       on_screen_text_json: clip.on_screen_text_json || [],
       preset_key: clip.preset_key,
       overlay_config: overlayConfig,
+      duration_sec: videoDuration, // Pass duration for sync
     }),
     30000,
     "Video assembly"
@@ -695,6 +816,247 @@ async function handleImageJob(supabase: any, job: any, services: ReturnType<type
       image_service: imageService.name,
     })
     .eq("id", job.clip_id);
+}
+
+// =============================================================================
+// RESEARCH JOB - Claude Brain + Apify Scraping
+// This is the FIRST step in the pipeline - analyzes prompt and gathers examples
+// =============================================================================
+
+async function handleResearchJob(supabase: any, job: any, services: ReturnType<typeof getServices>) {
+  const { intent_text, preset_key, mode, output_type } = job.payload_json;
+  const researchService = services.getResearchService();
+  
+  console.log(`[Research] Starting brain analysis for: "${intent_text}"`);
+  
+  // STEP 0: Detect content category from user prompt
+  const category = detectCategory(intent_text);
+  const categoryConfig = CATEGORY_DETECTION[category];
+  const viralThreshold = getViralThreshold(category);
+  
+  console.log(`[Research] 🎯 Detected category: ${category.toUpperCase()}`);
+  console.log(`[Research] 📊 Category: ${categoryConfig.description}`);
+  console.log(`[Research] 🔥 Viral threshold: ${viralThreshold.toLocaleString()} views`);
+  
+  // Update batch status to researching
+  await supabase
+    .from("batches")
+    .update({ status: "researching" })
+    .eq("id", job.batch_id);
+
+  let researchContext: {
+    scraped_videos: ScrapedVideo[];
+    trend_analysis: TrendAnalysis | null;
+    search_query: string;
+    research_summary: string;
+    category: ContentCategory;
+    category_info: { description: string; viral_threshold: number };
+  } = {
+    scraped_videos: [],
+    trend_analysis: null,
+    search_query: "",
+    research_summary: "",
+    category: category,
+    category_info: {
+      description: categoryConfig.description,
+      viral_threshold: viralThreshold,
+    },
+  };
+
+  try {
+    // STEP 1: Use Claude brain to analyze the prompt and generate smart search query
+    const searchQuery = await analyzePromptWithClaude(intent_text, preset_key, category);
+    researchContext.search_query = searchQuery;
+    console.log(`[Research] Claude brain generated search query: "${searchQuery}"`);
+
+    // STEP 2: Use Apify to scrape TikTok examples based on the query
+    // NOW with category-aware viral filtering
+    console.log(`[Research] Apify scraping VIRAL ${category} examples for: "${searchQuery}"`);
+    const scrapedVideos = await withTimeout(
+      researchService.searchVideos({
+        query: searchQuery,
+        platform: "tiktok",
+        limit: 15,
+        sort_by: "views",
+        category: category,
+        min_views: viralThreshold,
+      }),
+      120000, // 2 min timeout for scraping
+      "Apify scraping"
+    );
+    researchContext.scraped_videos = scrapedVideos;
+    console.log(`[Research] Scraped ${scrapedVideos.length} VIRAL ${category} videos`);
+
+    // STEP 3: Use Claude Sonnet to analyze the scraped content for patterns
+    if (scrapedVideos.length > 0) {
+      console.log(`[Research] 🔬 Analyzing ${scrapedVideos.length} viral videos with Claude Sonnet...`);
+      const analysis = await withTimeout(
+        researchService.analyzeVideos(searchQuery, scrapedVideos, category),
+        60000, // 1 min timeout for analysis
+        "Trend analysis"
+      );
+      researchContext.trend_analysis = analysis;
+      
+      // Generate a summary for the script service
+      researchContext.research_summary = generateResearchSummary(analysis, scrapedVideos, category);
+      console.log(`[Research] Analysis complete - found ${analysis.hook_patterns.length} hook patterns`);
+    }
+
+  } catch (researchError: any) {
+    // Research is optional - if it fails, log and continue with basic compile
+    console.warn(`[Research] Research step failed (will continue without): ${researchError.message}`);
+    researchContext.research_summary = "Research unavailable - using standard generation.";
+  }
+
+  // STEP 4: Store research results in batch metadata
+  await supabase
+    .from("batches")
+    .update({ 
+      research_json: researchContext,
+      status: "running"
+    })
+    .eq("id", job.batch_id);
+
+  // STEP 5: Create the compile job with research context
+  const compilePayload = {
+    ...job.payload_json,
+    research_context: researchContext,
+  };
+
+  const compileJobType = output_type === "image" ? "image_compile" : "compile";
+  await createChildJobIfNotExists(supabase, job.batch_id, null, compileJobType, compilePayload);
+  
+  console.log(`[Research] Created ${compileJobType} job with research context`);
+}
+
+/**
+ * CLAUDE BRAIN - The intelligent core of the research system
+ * Uses Claude 3.5 Sonnet for BEST accuracy in understanding user intent
+ * 
+ * EFFICIENCY: Single focused call, ~200 tokens, <1 second
+ * COST: ~$0.003 per call (very efficient)
+ */
+async function analyzePromptWithClaude(intentText: string, presetKey: string, category: ContentCategory): Promise<string> {
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const categoryConfig = CATEGORY_DETECTION[category];
+  
+  if (!anthropicKey) {
+    console.warn("[Claude Brain] No API key, using intent as search query");
+    return extractSearchTerms(intentText, category);
+  }
+
+  // Get trending hashtags and niche terms for this category
+  const trendingHashtags = categoryConfig.trending_hashtags?.slice(0, 3) || [];
+  const nicheTerms = categoryConfig.niche_terms?.slice(0, 3) || [];
+
+  try {
+    console.log(`[Claude Brain] 🧠 Analyzing prompt with Sonnet...`);
+    
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": anthropicKey,
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        // USE SONNET for best accuracy - worth the small cost increase for better results
+        model: Deno.env.get("CLAUDE_BRAIN_MODEL") || "claude-3-5-sonnet-20241022",
+        max_tokens: 100, // Keep it short - just need the query
+        messages: [{
+          role: "user",
+          content: `TASK: Generate the BEST TikTok search query to find VIRAL (500K+ views) examples.
+
+INTENT: "${intentText}"
+CATEGORY: ${category} (${categoryConfig.description})
+TRENDING: ${trendingHashtags.map(h => `#${h}`).join(" ")}
+NICHE TERMS: ${nicheTerms.join(", ")}
+
+OUTPUT: Return ONLY 3-5 search words. Use EXACT creator terminology. Be SPECIFIC, not generic.
+
+QUERY:`
+        }]
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Claude API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const query = data.content?.[0]?.text?.trim() || "";
+    
+    // Clean up the query
+    const cleanQuery = query.replace(/["']/g, "").replace(/^query:?\s*/i, "").trim();
+    
+    console.log(`[Claude Brain] ✅ Generated query: "${cleanQuery}"`);
+    
+    return cleanQuery || extractSearchTerms(intentText, category);
+    
+  } catch (error) {
+    console.warn("[Claude Brain] Analysis failed, using fallback:", error);
+    return extractSearchTerms(intentText, category);
+  }
+}
+
+/**
+ * Fallback: Extract search terms from intent text
+ * Now category-aware to include relevant hashtags
+ */
+function extractSearchTerms(intentText: string, category?: ContentCategory): string {
+  // Remove common words and extract key terms
+  const stopWords = new Set(["i", "want", "to", "make", "create", "about", "for", "the", "a", "an", "my", "your", "their", "video", "content", "clip"]);
+  const words = intentText.toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !stopWords.has(w));
+  
+  let query = words.slice(0, 3).join(" ") || intentText.slice(0, 50);
+  
+  // Add category hashtag if available
+  if (category && CATEGORY_DETECTION[category]) {
+    const topHashtag = CATEGORY_DETECTION[category].hashtags[0];
+    if (topHashtag) {
+      query += ` #${topHashtag}`;
+    }
+  }
+  
+  return query;
+}
+
+/**
+ * Generate human-readable research summary for script service
+ * Now includes category context
+ */
+function generateResearchSummary(
+  analysis: TrendAnalysis, 
+  videos: ScrapedVideo[], 
+  category?: ContentCategory
+): string {
+  const topHooks = analysis.hook_patterns.slice(0, 3).map(p => p.pattern);
+  const avgViews = videos.reduce((sum, v) => sum + v.views, 0) / videos.length;
+  const topVideo = videos[0];
+  const categoryInfo = category ? CATEGORY_DETECTION[category] : null;
+  
+  return `RESEARCH FINDINGS (${videos.length} viral ${category?.toUpperCase() || ""} examples analyzed):
+${categoryInfo ? `\n🎯 CATEGORY: ${categoryInfo.description}\n📊 VIRAL THRESHOLD: ${categoryInfo.min_viral_views.toLocaleString()}+ views` : ""}
+
+TOP HOOK PATTERNS IN THIS NICHE:
+${topHooks.map((h, i) => `${i + 1}. ${h}`).join("\n")}
+
+CONTENT STRUCTURE:
+- Average duration: ${analysis.content_structure.avg_duration_seconds}s
+- Common formats: ${analysis.content_structure.common_formats.join(", ")}
+- Pacing: ${analysis.content_structure.pacing}
+
+ENGAGEMENT DRIVERS: ${analysis.engagement_drivers.slice(0, 3).join(", ")}
+
+TOP PERFORMER (${Math.round(avgViews).toLocaleString()} avg views):
+"${topVideo?.hook_text || topVideo?.caption.slice(0, 100)}"
+${topVideo?.hashtags?.length ? `Hashtags: ${topVideo.hashtags.slice(0, 5).map(h => `#${h}`).join(" ")}` : ""}
+
+RECOMMENDED HOOKS TO TEST:
+${analysis.recommended_hooks.slice(0, 3).map((h, i) => `${i + 1}. "${h.hook}" - ${h.reasoning}`).join("\n")}`;
 }
 
 // Check if all clips in batch are done

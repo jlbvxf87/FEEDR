@@ -1,5 +1,15 @@
-export type PresetKey =
+// Content Methods (creator-familiar names)
+export type MethodKey =
   | "AUTO"
+  | "FOUNDERS"
+  | "PODCAST"
+  | "DISCOVERY"
+  | "CAMERA_PUT_DOWN"
+  | "SENSORY"
+  | "DELAYED_GRATIFICATION";
+
+// Legacy preset keys (backwards compatibility)
+export type LegacyPresetKey =
   | "RAW_UGC_V1"
   | "TIKTOK_AD_V1"
   | "PODCAST_V1"
@@ -9,9 +19,12 @@ export type PresetKey =
   | "HOOK_V1"
   | "MINIMAL_V1";
 
+// Combined type for all valid preset/method keys
+export type PresetKey = MethodKey | LegacyPresetKey;
+
 export type BatchMode = "hook_test" | "angle_test" | "format_test";
 export type BatchSize = 2 | 4 | 6 | 8;
-export type BatchStatus = "queued" | "running" | "done" | "failed";
+export type BatchStatus = "queued" | "researching" | "running" | "done" | "failed";
 export type OutputType = "video" | "image";
 export type ImageType = "product" | "lifestyle" | "ad" | "ugc" | "hero" | "custom";
 
@@ -25,7 +38,7 @@ export type ClipStatus =
   | "ready"
   | "failed";
 
-export type JobType = "compile" | "tts" | "video" | "assemble" | "image" | "image_compile";
+export type JobType = "research" | "compile" | "tts" | "video" | "assemble" | "image" | "image_compile";
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
 export interface PresetConfig {
@@ -66,6 +79,34 @@ export interface Preset {
 export type PaymentStatus = "pending" | "charged" | "failed" | "refunded" | "free";
 export type QualityMode = "fast" | "good" | "better";
 
+// Research context returned by the brain + Apify research step
+export interface ResearchContext {
+  category?: string;
+  category_info?: {
+    description: string;
+    viral_threshold: number;
+  };
+  search_query?: string;
+  scraped_videos?: Array<{
+    id?: string;
+    views: number;
+    likes?: number;
+    shares?: number;
+    hook_text?: string;
+    caption?: string;
+    url?: string;
+    author?: string;
+  }>;
+  trend_analysis?: {
+    hook_patterns?: Array<{ pattern: string; frequency: number }>;
+    recommended_hooks?: Array<{ hook: string; reasoning: string }>;
+    engagement_drivers?: string[];
+    content_themes?: string[];
+    viral_elements?: string[];
+  };
+  research_summary?: string;
+}
+
 export interface Batch {
   id: string;
   created_at: string;
@@ -83,6 +124,8 @@ export interface Batch {
   base_cost_cents: number;
   user_charge_cents: number;
   payment_status: PaymentStatus;
+  // Research data from brain + Apify
+  research_json?: ResearchContext;
 }
 
 export interface OnScreenText {

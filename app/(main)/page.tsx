@@ -123,7 +123,8 @@ function FeedPageContent() {
 
   // Poll for updates and trigger worker while batch is running
   useEffect(() => {
-    if (!currentBatch || currentBatch.status !== "running") return;
+    // Poll while batch is in any active state (researching or running)
+    if (!currentBatch || (currentBatch.status !== "running" && currentBatch.status !== "researching")) return;
 
     const pollInterval = setInterval(async () => {
       try {
@@ -246,7 +247,7 @@ function FeedPageContent() {
     }
   }, [clips]);
 
-  const isRunning = currentBatch?.status === "running";
+  const isRunning = currentBatch?.status === "running" || currentBatch?.status === "researching";
   const showManufacturing = isRunning || isGenerating;
   const selectedPresetData = presets.find(p => p.key === selectedPreset);
   const presetLabel = selectedPresetData?.name || selectedPreset;
@@ -517,30 +518,64 @@ function FeedPageContent() {
           </section>
         )}
 
-        {/* Completion notification - only shows when videos have final_url */}
-        {!showManufacturing && currentBatch?.status === "done" && clips.filter(c => c.final_url).length > 0 && (
+        {/* Completion notification - directs to correct Library tab */}
+        {!showManufacturing && currentBatch?.status === "done" && clips.filter(c => c.final_url || c.image_url).length > 0 && (
           <section className="text-center py-8">
-            {/* Success icon */}
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#2EE6C9] flex items-center justify-center">
-              <svg className="w-8 h-8 text-[#0B0E11]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
+            {/* Success icon with type-specific styling */}
+            <div className={cn(
+              "w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center",
+              outputType === "video" ? "bg-[#2EE6C9]" : "bg-[#A855F7]"
+            )}>
+              {outputType === "video" ? (
+                <svg className="w-8 h-8 text-[#0B0E11]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none" />
+                </svg>
+              ) : (
+                <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
+                  <path d="M21 15l-5-5L5 21" />
+                </svg>
+              )}
             </div>
             
             {/* Message */}
             <p className="text-white font-semibold text-lg mb-1">
-              {clips.filter(c => c.final_url).length} {outputType}{clips.filter(c => c.final_url).length > 1 ? 's' : ''} ready!
+              {clips.filter(c => c.final_url || c.image_url).length} {outputType}{clips.filter(c => c.final_url || c.image_url).length > 1 ? 's' : ''} ready!
             </p>
             <p className="text-[#6B7A8F] text-sm mb-6">
-              View them in your Library
+              {outputType === "video" 
+                ? "View them in your Studio" 
+                : "View them in your Gallery"}
             </p>
             
-            {/* View Library button */}
+            {/* View Library button - directs to correct tab */}
             <Link
-              href="/library"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#2EE6C9] text-[#0B0E11] font-semibold text-sm hover:opacity-90 transition-opacity"
+              href={outputType === "video" ? "/library?tab=studio" : "/library?tab=gallery"}
+              className={cn(
+                "inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity",
+                outputType === "video" 
+                  ? "bg-[#2EE6C9] text-[#0B0E11]" 
+                  : "bg-[#A855F7] text-white"
+              )}
             >
-              Open Library
+              {outputType === "video" ? (
+                <>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <polygon points="5 3 19 12 5 21 5 3" />
+                  </svg>
+                  Open Studio
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <path d="M21 15l-5-5L5 21" />
+                  </svg>
+                  Open Gallery
+                </>
+              )}
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
