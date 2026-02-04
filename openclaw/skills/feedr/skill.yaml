@@ -1,0 +1,56 @@
+# FEEDR Skill for OpenClaw
+# This skill allows OpenClaw to generate videos and images via FEEDR
+
+name: feedr
+description: Generate viral videos and product images using FEEDR's AI pipeline
+version: 1.0.0
+author: FEEDR
+
+# When should OpenClaw use this skill?
+triggers:
+  - "make me a video"
+  - "create a video"
+  - "generate video"
+  - "product video"
+  - "viral video"
+  - "tiktok video"
+  - "make images"
+  - "product photos"
+  - "generate photos"
+  - "lifestyle shots"
+
+# Required environment variables
+env:
+  FEEDR_SUPABASE_URL:
+    description: Your FEEDR Supabase URL
+    required: true
+  FEEDR_SUPABASE_KEY:
+    description: Your FEEDR Supabase service role key
+    required: true
+
+# Skill capabilities
+capabilities:
+  - name: generate_content
+    description: Generate videos or images based on user intent
+    parameters:
+      input:
+        type: string
+        description: What the user wants to create
+      output_type:
+        type: string
+        enum: [video, image]
+        default: video
+        
+  - name: check_batch_status
+    description: Check the status of a generation batch
+    parameters:
+      batch_id:
+        type: string
+        description: The batch ID to check
+        
+  - name: list_recent_batches
+    description: List user's recent batches
+    parameters:
+      limit:
+        type: number
+        default: 5
