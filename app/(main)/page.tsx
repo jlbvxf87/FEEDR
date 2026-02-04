@@ -487,67 +487,33 @@ function FeedPageContent() {
 
         {/* Completion notification - only shows when videos have final_url */}
         {!showManufacturing && currentBatch?.status === "done" && clips.filter(c => c.final_url).length > 0 && (
-          <section className="space-y-4">
-            {/* Success notification bar */}
-            <div className="bg-[#2EE6C9]/10 border border-[#2EE6C9]/30 rounded-xl p-4 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-[#2EE6C9] flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-[#0B0E11]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-semibold">
-                  {clips.filter(c => c.final_url).length} {outputType}{clips.filter(c => c.final_url).length > 1 ? 's' : ''} ready!
-                </p>
-                <p className="text-[#6B7A8F] text-sm truncate">
-                  {currentBatch.intent_text}
-                </p>
-              </div>
-              <Link
-                href="/library"
-                className="flex-shrink-0 px-4 py-2 rounded-lg bg-[#2EE6C9] text-[#0B0E11] font-semibold text-sm hover:opacity-90 transition-opacity"
-              >
-                View
-              </Link>
+          <section className="text-center py-8">
+            {/* Success icon */}
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#2EE6C9] flex items-center justify-center">
+              <svg className="w-8 h-8 text-[#0B0E11]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
             </div>
-
-            {/* Preview thumbnails */}
-            <div className="grid grid-cols-3 gap-2">
-              {clips.filter(c => c.final_url).slice(0, 3).map((clip) => (
-                <Link
-                  key={clip.id}
-                  href="/library"
-                  className="relative aspect-[9/16] rounded-xl overflow-hidden bg-[#1C2230] group"
-                >
-                  {outputType === "video" ? (
-                    <video
-                      src={clip.final_url!}
-                      className="w-full h-full object-cover"
-                      muted
-                      playsInline
-                      preload="metadata"
-                      onMouseEnter={(e) => e.currentTarget.play()}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.pause();
-                        e.currentTarget.currentTime = 0;
-                      }}
-                    />
-                  ) : (
-                    <img
-                      src={clip.final_url!}
-                      alt={clip.variant_id}
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                    <span className="text-white text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                      {clip.variant_id}
-                    </span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-
+            
+            {/* Message */}
+            <p className="text-white font-semibold text-lg mb-1">
+              {clips.filter(c => c.final_url).length} {outputType}{clips.filter(c => c.final_url).length > 1 ? 's' : ''} ready!
+            </p>
+            <p className="text-[#6B7A8F] text-sm mb-6">
+              View them in your Library
+            </p>
+            
+            {/* View Library button */}
+            <Link
+              href="/library"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#2EE6C9] text-[#0B0E11] font-semibold text-sm hover:opacity-90 transition-opacity"
+            >
+              Open Library
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
+            
             {/* Create another button */}
             <button
               onClick={() => {
@@ -555,7 +521,7 @@ function FeedPageContent() {
                 setClips([]);
                 setIntentText("");
               }}
-              className="w-full py-3 rounded-xl border border-[#2D3748] text-[#6B7A8F] text-sm font-medium hover:text-white hover:border-[#4B5563] transition-colors"
+              className="block w-full mt-4 text-[#6B7A8F] text-sm hover:text-white transition-colors"
             >
               Create another
             </button>
