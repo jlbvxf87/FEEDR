@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense, useMemo } from "react";
+import { useState, useEffect, useCallback, Suspense, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseBrowser";
 import type { Preset, Batch, Clip, PresetKey, BatchMode, BatchSize, OutputType } from "@/lib/types";
@@ -31,6 +31,16 @@ function FeedPageContent() {
   // Input state
   const [intentText, setIntentText] = useState("");
   const [showPresets, setShowPresets] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "56px"; // Reset to min height
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`; // Max 200px
+    }
+  }, []);
   
   // Output type
   const [outputType, setOutputType] = useState<OutputType>("video");
@@ -273,28 +283,38 @@ function FeedPageContent() {
             </div>
           </div>
 
-          {/* Main Input */}
+          {/* Main Input - Auto-expanding */}
           <div className="relative">
-            <input
-              type="text"
+            <textarea
+              ref={textareaRef}
               value={intentText}
-              onChange={(e) => setIntentText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
+              onChange={(e) => {
+                setIntentText(e.target.value);
+                adjustTextareaHeight();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleGenerate();
+                }
+              }}
               placeholder={outputType === "video" ? "Describe your video..." : "Describe your image..."}
               disabled={isGenerating || isRunning}
+              rows={1}
               className={cn(
-                "w-full h-14 px-5 pr-24 rounded-2xl",
+                "w-full min-h-[56px] py-4 px-5 pr-20 rounded-2xl resize-none",
                 "bg-[#12161D] border border-[#1C2230]",
-                "text-white text-base placeholder:text-[#4B5563]",
+                "text-white text-base placeholder:text-[#4B5563] leading-relaxed",
                 "focus:outline-none focus:border-[#2EE6C9]/50 focus:ring-1 focus:ring-[#2EE6C9]/20",
                 "disabled:opacity-50 transition-all"
               )}
+              style={{ height: "56px" }}
             />
             <button
               onClick={handleGenerate}
               disabled={!intentText.trim() || isGenerating || isRunning}
               className={cn(
-                "absolute right-2 top-1/2 -translate-y-1/2",
+                "absolute right-3 bottom-3",
                 "h-10 px-5 rounded-xl font-semibold text-sm",
                 "bg-[#2EE6C9] text-[#0B0E11]",
                 "hover:bg-[#26D4B8]",
