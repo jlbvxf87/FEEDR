@@ -42,8 +42,9 @@ function FeedPageContent() {
     }
   }, []);
   
-  // Output type
+  // Output type & batch size
   const [outputType, setOutputType] = useState<OutputType>("video");
+  const [videoBatchSize, setVideoBatchSize] = useState<1 | 3 | 5>(3);
   const [imagePack, setImagePack] = useState<ImagePack>("auto");
   const [showImagePacks, setShowImagePacks] = useState(false);
   
@@ -55,7 +56,7 @@ function FeedPageContent() {
 
   // Calculate estimated cost based on current settings
   const estimatedCost = useMemo(() => {
-    const batchSize = outputType === "image" ? 9 : 3;
+    const batchSize = outputType === "image" ? 9 : videoBatchSize;
     const analysis = analyzeComplexity(intentText);
     const mode = analysis.suggestedMode;
     const estimate = estimateBatchCost(mode, outputType, batchSize);
@@ -63,8 +64,9 @@ function FeedPageContent() {
       ...estimate,
       mode,
       modeLabel: QUALITY_TIERS[mode].label,
+      batchSize,
     };
-  }, [intentText, outputType]);
+  }, [intentText, outputType, videoBatchSize]);
 
   // Load initial data
   useEffect(() => {
@@ -168,7 +170,7 @@ function FeedPageContent() {
 
     try {
       const mode: BatchMode = "hook_test";
-      const batchSize = outputType === "image" ? 9 : 3;
+      const batchSize = outputType === "image" ? 9 : videoBatchSize;
       
       const imagePrompts = outputType === "image" 
         ? generateImagePrompts(intentText.trim(), imagePack)
@@ -330,20 +332,46 @@ function FeedPageContent() {
             </button>
           </div>
 
-          {/* Cost Preview - shows when typing */}
+          {/* Options bar - shows when typing */}
           {intentText.trim() && !isGenerating && !isRunning && (
-            <div className="flex items-center justify-between px-2">
+            <div className="flex items-center justify-between px-1">
+              {/* Left: Style */}
               <button
                 onClick={() => setShowPresets(!showPresets)}
                 className="text-xs text-[#4B5563] hover:text-[#6B7A8F] transition-colors"
               >
                 {selectedPreset === "AUTO" ? `Auto • ${estimatedCost.modeLabel}` : `${presetLabel}`}
               </button>
-              <div className="flex items-center gap-3 text-xs">
-                <span className="text-[#4B5563]">
-                  {outputType === "video" ? "3 videos" : "9 images"}
+
+              {/* Right: Batch size + Cost */}
+              <div className="flex items-center gap-3">
+                {/* Batch size selector (video only) */}
+                {outputType === "video" && (
+                  <div className="flex items-center bg-[#12161D] rounded-lg p-0.5 border border-[#1C2230]">
+                    {([1, 3, 5] as const).map((size) => (
+                      <button
+                        key={size}
+                        onClick={() => setVideoBatchSize(size)}
+                        className={cn(
+                          "px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                          videoBatchSize === size
+                            ? "bg-[#1C2230] text-white"
+                            : "text-[#4B5563] hover:text-[#6B7A8F]"
+                        )}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Count label */}
+                <span className="text-xs text-[#4B5563]">
+                  {outputType === "video" ? `${videoBatchSize} video${videoBatchSize > 1 ? 's' : ''}` : "9 images"}
                 </span>
-                <span className="text-[#2EE6C9] font-medium">
+
+                {/* Cost */}
+                <span className="text-xs text-[#2EE6C9] font-medium">
                   ~{formatCost(estimatedCost.totalCents)}
                 </span>
               </div>
