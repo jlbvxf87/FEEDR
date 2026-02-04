@@ -2,7 +2,7 @@
 // Uses KEIAPI for Sora video generation
 
 import { VideoService, VideoOutput, VideoGenerationParams, VIDEO_STYLE_PROMPTS } from "./interface.ts";
-import { uploadVideo } from "../storage.ts";
+import { uploadVideo } from "../../storage.ts";
 
 export class SoraVideoService implements VideoService {
   readonly name = "sora";

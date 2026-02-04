@@ -2,7 +2,7 @@
 // Uses ElevenLabs API for text-to-speech
 
 import { VoiceService, VoiceOutput, VoiceGenerationParams, VOICE_PRESETS } from "./interface.ts";
-import { uploadAudio } from "../storage.ts";
+import { uploadAudio } from "../../storage.ts";
 
 const ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1";
 

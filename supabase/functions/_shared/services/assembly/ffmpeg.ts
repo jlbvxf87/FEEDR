@@ -2,7 +2,7 @@
 // Uses a cloud FFmpeg service for video assembly
 
 import { AssemblyService, AssemblyOutput, AssemblyParams, OverlayConfig } from "./interface.ts";
-import { uploadVideo, downloadFile } from "../storage.ts";
+import { uploadVideo, downloadFile } from "../../storage.ts";
 
 export class FFmpegAssemblyService implements AssemblyService {
   readonly name = "ffmpeg";

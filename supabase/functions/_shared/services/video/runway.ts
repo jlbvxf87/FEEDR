@@ -2,7 +2,7 @@
 // Uses Runway ML API for video generation (Gen-3 Alpha)
 
 import { VideoService, VideoOutput, VideoGenerationParams } from "./interface.ts";
-import { uploadVideo } from "../storage.ts";
+import { uploadVideo } from "../../storage.ts";
 
 const RUNWAY_API_URL = "https://api.runwayml.com/v1";
 

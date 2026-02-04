@@ -2,7 +2,7 @@
 // Uses OpenAI's text-to-speech API
 
 import { VoiceService, VoiceOutput, VoiceGenerationParams, VOICE_PRESETS } from "./interface.ts";
-import { uploadAudio } from "../storage.ts";
+import { uploadAudio } from "../../storage.ts";
 
 const OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech";
 
