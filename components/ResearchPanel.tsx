@@ -58,75 +58,88 @@ export function ResearchPanel({ query, onUseHook, onClose }: ResearchPanelProps)
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/80 backdrop-blur-md"
         onClick={onClose}
       />
       
       {/* Panel */}
-      <div className="relative w-full max-w-lg max-h-[80vh] bg-[#0B0E11] rounded-t-2xl sm:rounded-2xl border border-[#1C2230] overflow-hidden">
+      <div className="relative w-full max-w-md bg-[#12161D] rounded-2xl border border-[#2A3241] shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[#1C2230]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2A3241]">
           <div>
-            <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
+            <h2 className="text-base font-semibold text-white">
               Trend Research
             </h2>
-            <p className="text-xs text-[#6B7280] mt-0.5">
-              Find viral hooks from TikTok
+            <p className="text-xs text-[#6B7A8F] mt-0.5">
+              Scrapes TikTok for viral hooks
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-[#6B7280] hover:text-white transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-[#1A1F2B] text-[#6B7A8F] hover:text-white hover:bg-[#252B39] transition-colors"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-4 overflow-y-auto max-h-[60vh]">
+        <div className="p-5 overflow-y-auto max-h-[60vh]">
           {!analysis && !isLoading && (
-            <div className="text-center py-8">
-              <p className="text-sm text-[#9CA3AF] mb-4">
-                Research trending content for:
-              </p>
-              <p className="text-white font-medium mb-6 px-4">
+            <div className="text-center py-6">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[#2EE6C9]/20 to-[#0095FF]/20 flex items-center justify-center">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="url(#grad)" strokeWidth="1.5">
+                  <defs>
+                    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#2EE6C9" />
+                      <stop offset="100%" stopColor="#0095FF" />
+                    </linearGradient>
+                  </defs>
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="M21 21l-4.35-4.35" />
+                </svg>
+              </div>
+              <p className="text-white font-medium mb-2">
                 "{query}"
+              </p>
+              <p className="text-sm text-[#6B7A8F] mb-6">
+                Find what's working on TikTok right now
               </p>
               <button
                 onClick={handleResearch}
-                className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-[#2EE6C9] to-[#0095FF] text-[#0B0E11] font-semibold text-sm uppercase tracking-wider hover:opacity-90 transition-opacity"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-[#2EE6C9] to-[#0095FF] text-[#0B0E11] font-semibold text-sm hover:opacity-90 transition-opacity"
               >
-                🔍 Find Trending Hooks
+                Start Research
               </button>
             </div>
           )}
 
           {isLoading && (
-            <div className="text-center py-12">
-              <div className="inline-flex items-center gap-2 text-[#2EE6C9]">
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                <span className="text-sm">Analyzing TikTok trends...</span>
-              </div>
-              <p className="text-xs text-[#6B7280] mt-2">
-                This may take 30-60 seconds
+            <div className="text-center py-8">
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full border-2 border-[#2EE6C9]/30 border-t-[#2EE6C9] animate-spin" />
+              <p className="text-sm text-white mb-1">Scraping TikTok...</p>
+              <p className="text-xs text-[#6B7A8F]">
+                Analyzing trending content (30-60s)
               </p>
             </div>
           )}
 
           {error && (
-            <div className="text-center py-8">
-              <p className="text-red-500 text-sm mb-4">{error}</p>
+            <div className="text-center py-6">
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v4M12 16h.01" />
+                </svg>
+              </div>
+              <p className="text-red-400 text-sm mb-4">{error}</p>
               <button
                 onClick={handleResearch}
-                className="text-xs text-[#2EE6C9] underline"
+                className="px-4 py-2 rounded-lg bg-[#1A1F2B] text-white text-sm hover:bg-[#252B39] transition-colors"
               >
                 Try again
               </button>
@@ -134,36 +147,39 @@ export function ResearchPanel({ query, onUseHook, onClose }: ResearchPanelProps)
           )}
 
           {analysis && (
-            <div className="space-y-6">
-              {/* Stats */}
-              <div className="flex items-center gap-4 text-xs text-[#6B7280]">
-                <span>📊 Analyzed {videosFound} videos</span>
+            <div className="space-y-5">
+              {/* Stats Badge */}
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#2EE6C9]/10 text-[#2EE6C9] text-xs">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                </svg>
+                {videosFound} videos analyzed
               </div>
 
               {/* Recommended Hooks */}
               <div>
-                <h3 className="text-xs font-medium text-[#6B7280] uppercase tracking-wider mb-3">
-                  Recommended Hooks
+                <h3 className="text-xs font-medium text-[#6B7A8F] uppercase tracking-wider mb-3">
+                  Top Hooks
                 </h3>
                 <div className="space-y-2">
-                  {analysis.recommended_hooks?.slice(0, 5).map((item, index) => (
-                    <div
+                  {analysis.recommended_hooks?.slice(0, 4).map((item, index) => (
+                    <button
                       key={index}
-                      className="bg-[#1C2230] rounded-lg p-3 group"
+                      onClick={() => onUseHook(item.hook)}
+                      className="w-full text-left bg-[#1A1F2B] hover:bg-[#252B39] rounded-xl p-4 transition-colors group"
                     >
-                      <p className="text-sm text-white mb-1">
+                      <p className="text-sm text-white mb-1.5 leading-relaxed">
                         "{item.hook}"
                       </p>
-                      <p className="text-xs text-[#6B7280] mb-2">
-                        {item.reasoning}
-                      </p>
-                      <button
-                        onClick={() => onUseHook(item.hook)}
-                        className="text-xs text-[#2EE6C9] hover:underline opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        Use this hook →
-                      </button>
-                    </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-[#6B7A8F]">
+                          {item.reasoning}
+                        </p>
+                        <span className="text-xs text-[#2EE6C9] opacity-0 group-hover:opacity-100 transition-opacity">
+                          Use →
+                        </span>
+                      </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -171,44 +187,39 @@ export function ResearchPanel({ query, onUseHook, onClose }: ResearchPanelProps)
               {/* Hook Patterns */}
               {analysis.hook_patterns && analysis.hook_patterns.length > 0 && (
                 <div>
-                  <h3 className="text-xs font-medium text-[#6B7280] uppercase tracking-wider mb-3">
-                    Common Hook Patterns
+                  <h3 className="text-xs font-medium text-[#6B7A8F] uppercase tracking-wider mb-3">
+                    Patterns
                   </h3>
-                  <div className="space-y-2">
-                    {analysis.hook_patterns.slice(0, 3).map((pattern, index) => (
-                      <div
+                  <div className="flex flex-wrap gap-2">
+                    {analysis.hook_patterns.slice(0, 4).map((pattern, index) => (
+                      <span
                         key={index}
-                        className="flex items-center justify-between bg-[#1C2230] rounded-lg px-3 py-2"
+                        className="px-3 py-1.5 rounded-full bg-[#1A1F2B] text-xs text-white"
                       >
-                        <span className="text-sm text-white">{pattern.pattern}</span>
-                        <span className="text-xs text-[#6B7280]">
+                        {pattern.pattern}
+                        <span className="ml-1.5 text-[#6B7A8F]">
                           {Math.round(pattern.frequency * 100)}%
                         </span>
-                      </div>
+                      </span>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Content Structure */}
+              {/* Content Insights */}
               {analysis.content_structure && (
-                <div>
-                  <h3 className="text-xs font-medium text-[#6B7280] uppercase tracking-wider mb-3">
-                    Content Insights
-                  </h3>
-                  <div className="bg-[#1C2230] rounded-lg p-3 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[#6B7280]">Avg Duration</span>
-                      <span className="text-white">
-                        {analysis.content_structure.avg_duration_seconds}s
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[#6B7280]">Common Formats</span>
-                      <span className="text-white text-right text-xs">
-                        {analysis.content_structure.common_formats?.slice(0, 2).join(", ")}
-                      </span>
-                    </div>
+                <div className="flex gap-3">
+                  <div className="flex-1 bg-[#1A1F2B] rounded-xl p-3 text-center">
+                    <p className="text-lg font-semibold text-white">
+                      {analysis.content_structure.avg_duration_seconds}s
+                    </p>
+                    <p className="text-xs text-[#6B7A8F]">Avg Length</p>
+                  </div>
+                  <div className="flex-1 bg-[#1A1F2B] rounded-xl p-3 text-center">
+                    <p className="text-lg font-semibold text-white">
+                      {analysis.content_structure.common_formats?.[0] || "—"}
+                    </p>
+                    <p className="text-xs text-[#6B7A8F]">Top Format</p>
                   </div>
                 </div>
               )}
