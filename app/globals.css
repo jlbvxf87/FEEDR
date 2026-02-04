@@ -1,0 +1,340 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * FEEDR Design System
+ * Terminal-grade dark UI with brand accent gradients
+ * 
+ * RULES:
+ * - No raw hex codes in components (use tokens/classes)
+ * - Gradients only for: logo, primary buttons, selected states
+ * - Animations: fast, subtle, purposeful (no bouncy)
+ */
+
+@layer base {
+  :root {
+    /* ========== BACKGROUND ========== */
+    --feedr-bg: #0B0E11;
+    --feedr-surface: #11151C;
+    --feedr-elevated: #161B24;
+    
+    /* ========== BORDERS ========== */
+    --feedr-border: #1C2230;
+    --feedr-border-subtle: #151A23;
+    --feedr-border-focus: rgba(46, 230, 201, 0.3);
+    
+    /* ========== TEXT ========== */
+    --feedr-text: #FFFFFF;
+    --feedr-text-secondary: #9CA3AF;
+    --feedr-text-muted: #6B7280;
+    --feedr-text-disabled: #4B5563;
+    
+    /* ========== ACCENT (GRADIENT STOPS) ========== */
+    --feedr-teal: #2EE6C9;
+    --feedr-cyan: #1FB6FF;
+    --feedr-blue: #3A7CFF;
+    
+    /* ========== SEMANTIC ========== */
+    --feedr-success: #22C55E;
+    --feedr-danger: #FF4D4F;
+    --feedr-warning: #F59E0B;
+    
+    /* ========== EFFECTS ========== */
+    --feedr-glow-subtle: 0 0 20px rgba(46, 230, 201, 0.1);
+    --feedr-glow-medium: 0 0 20px rgba(46, 230, 201, 0.15), 0 0 40px rgba(31, 182, 255, 0.1);
+    --feedr-glow-strong: 0 0 30px rgba(46, 230, 201, 0.25), 0 0 60px rgba(31, 182, 255, 0.15);
+    --feedr-focus-ring: 0 0 0 1px rgba(46, 230, 201, 0.3), 0 0 20px rgba(46, 230, 201, 0.1);
+    
+    /* ========== ANIMATION ========== */
+    --feedr-duration-instant: 100ms;
+    --feedr-duration-fast: 150ms;
+    --feedr-duration-normal: 200ms;
+    --feedr-duration-slow: 300ms;
+    --feedr-easing: cubic-bezier(0.4, 0, 0.2, 1);
+    --feedr-easing-snap: cubic-bezier(0.2, 0, 0, 1);
+    
+    /* ========== SHADCN COMPAT ========== */
+    --background: 220 20% 4%;
+    --foreground: 210 20% 98%;
+    --card: 220 25% 7%;
+    --card-foreground: 210 20% 98%;
+    --popover: 220 25% 7%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 168 80% 54%;
+    --primary-foreground: 220 20% 4%;
+    --secondary: 220 25% 12%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 220 25% 12%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 220 25% 14%;
+    --input: 220 25% 12%;
+    --ring: 168 80% 54%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 220 20% 4%;
+    --foreground: 210 20% 98%;
+    --card: 220 25% 7%;
+    --card-foreground: 210 20% 98%;
+    --popover: 220 25% 7%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 168 80% 54%;
+    --primary-foreground: 220 20% 4%;
+    --secondary: 220 25% 12%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 220 25% 12%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 220 25% 14%;
+    --input: 220 25% 12%;
+    --ring: 168 80% 54%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* ============================================
+   FEEDR BRAND UTILITIES
+   ============================================ */
+
+@layer utilities {
+  /* Primary gradient (buttons, selected states) */
+  .feedr-gradient {
+    background: linear-gradient(135deg, var(--feedr-teal) 0%, var(--feedr-cyan) 100%);
+  }
+  
+  /* Gradient text */
+  .feedr-gradient-text {
+    background: linear-gradient(135deg, var(--feedr-teal) 0%, var(--feedr-cyan) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  /* Glow effects */
+  .feedr-glow {
+    box-shadow: var(--feedr-glow-medium);
+  }
+  
+  .feedr-glow-subtle {
+    box-shadow: var(--feedr-glow-subtle);
+  }
+  
+  .feedr-glow-strong {
+    box-shadow: var(--feedr-glow-strong);
+  }
+  
+  /* Input focus glow */
+  .feedr-input-glow:focus {
+    box-shadow: var(--feedr-focus-ring);
+  }
+  
+  /* Surface colors */
+  .feedr-bg {
+    background-color: var(--feedr-bg);
+  }
+  
+  .feedr-surface {
+    background-color: var(--feedr-surface);
+  }
+  
+  .feedr-border {
+    border-color: var(--feedr-border);
+  }
+}
+
+/* ============================================
+   ANIMATIONS (Terminal-grade: fast, subtle)
+   ============================================ */
+
+/* Shimmer for manufacturing state */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--feedr-surface) 0%,
+    var(--feedr-elevated) 50%,
+    var(--feedr-surface) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+/* Fade in */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--feedr-duration-normal) var(--feedr-easing) forwards;
+}
+
+/* Slide up (for clip arrival) */
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp var(--feedr-duration-slow) var(--feedr-easing-snap) forwards;
+}
+
+/* Pulse glow (for splash screen logo) */
+@keyframes pulseGlow {
+  0%, 100% { 
+    filter: drop-shadow(0 0 20px rgba(46, 230, 201, 0.4));
+  }
+  50% { 
+    filter: drop-shadow(0 0 40px rgba(46, 230, 201, 0.6));
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* Winner pulse (one-shot green ring) */
+@keyframes winnerPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+.animate-winner-pulse {
+  animation: winnerPulse 0.4s var(--feedr-easing) forwards;
+}
+
+/* Kill flash (one-shot red overlay) */
+@keyframes killFlash {
+  0% {
+    background-color: rgba(255, 77, 79, 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-kill-flash {
+  animation: killFlash 0.3s var(--feedr-easing) forwards;
+}
+
+/* Preset select snap */
+@keyframes selectSnap {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.98);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-select-snap {
+  animation: selectSnap var(--feedr-duration-fast) var(--feedr-easing-snap);
+}
+
+/* Clip arrival */
+@keyframes clipArrive {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-clip-arrive {
+  animation: clipArrive var(--feedr-duration-slow) var(--feedr-easing-snap) forwards;
+}
+
+/* ============================================
+   SCROLLBAR (Minimal)
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--feedr-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--feedr-text-disabled);
+}
+
+/* ============================================
+   SELECTION
+   ============================================ */
+
+::selection {
+  background: rgba(46, 230, 201, 0.3);
+  color: white;
+}
+
+/* ============================================
+   FOCUS VISIBLE (Accessibility)
+   ============================================ */
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--feedr-focus-ring);
+}
+
+/* ============================================
+   GRID PATTERN (for backgrounds)
+   ============================================ */
+
+.feedr-grid-pattern {
+  background-image: 
+    linear-gradient(rgba(46, 230, 201, 0.5) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46, 230, 201, 0.5) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
