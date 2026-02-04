@@ -48,6 +48,9 @@ function FeedPageContent() {
   const [imagePack, setImagePack] = useState<ImagePack>("auto");
   const [showImagePacks, setShowImagePacks] = useState(false);
   
+  // Quality mode - user controls which models to use
+  const [qualityMode, setQualityMode] = useState<QualityMode>("balanced");
+  
   // Cost tracking
   const [totalSpent, setTotalSpent] = useState(0);
   const [sessionCost, setSessionCost] = useState(0);
@@ -57,16 +60,14 @@ function FeedPageContent() {
   // Calculate estimated cost based on current settings
   const estimatedCost = useMemo(() => {
     const batchSize = outputType === "image" ? 9 : videoBatchSize;
-    const analysis = analyzeComplexity(intentText);
-    const mode = analysis.suggestedMode;
-    const estimate = estimateBatchCost(mode, outputType, batchSize);
+    const estimate = estimateBatchCost(qualityMode, outputType, batchSize);
     return {
       ...estimate,
-      mode,
-      modeLabel: QUALITY_TIERS[mode].label,
+      mode: qualityMode,
+      modeLabel: QUALITY_TIERS[qualityMode].label,
       batchSize,
     };
-  }, [intentText, outputType, videoBatchSize]);
+  }, [qualityMode, outputType, videoBatchSize]);
 
   // Load initial data
   useEffect(() => {
@@ -334,44 +335,80 @@ function FeedPageContent() {
 
           {/* Options - Always visible */}
           <div className={cn(
-            "flex items-center justify-between p-3 rounded-xl",
+            "space-y-3 p-4 rounded-xl",
             "bg-[#12161D] border border-[#1C2230]",
             (isGenerating || isRunning) && "opacity-50 pointer-events-none"
           )}>
-            {/* Batch size selector */}
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-[#6B7A8F]">
-                {outputType === "video" ? "Videos:" : "Images:"}
-              </span>
-              {outputType === "video" ? (
+            {/* Row 1: Count + Quality */}
+            <div className="flex items-center justify-between">
+              {/* Batch size selector */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-[#6B7A8F] w-14">
+                  {outputType === "video" ? "Videos" : "Images"}
+                </span>
+                {outputType === "video" ? (
+                  <div className="flex items-center bg-[#0B0E11] rounded-lg p-0.5">
+                    {([1, 3, 5] as const).map((size) => (
+                      <button
+                        key={size}
+                        onClick={() => setVideoBatchSize(size)}
+                        disabled={isGenerating || isRunning}
+                        className={cn(
+                          "w-9 h-8 rounded-md text-sm font-medium transition-all",
+                          videoBatchSize === size
+                            ? "bg-[#2EE6C9] text-[#0B0E11]"
+                            : "text-[#6B7A8F] hover:text-white"
+                        )}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-sm text-white font-medium px-3">9</span>
+                )}
+              </div>
+
+              {/* Quality mode selector */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-[#6B7A8F]">Quality</span>
                 <div className="flex items-center bg-[#0B0E11] rounded-lg p-0.5">
-                  {([1, 3, 5] as const).map((size) => (
+                  {(["economy", "balanced", "premium"] as const).map((mode) => (
                     <button
-                      key={size}
-                      onClick={() => setVideoBatchSize(size)}
+                      key={mode}
+                      onClick={() => setQualityMode(mode)}
                       disabled={isGenerating || isRunning}
                       className={cn(
-                        "w-8 h-7 rounded-md text-sm font-medium transition-all",
-                        videoBatchSize === size
-                          ? "bg-[#2EE6C9] text-[#0B0E11]"
+                        "px-3 h-8 rounded-md text-xs font-medium transition-all",
+                        qualityMode === mode
+                          ? mode === "economy" 
+                            ? "bg-[#F59E0B] text-[#0B0E11]"
+                            : mode === "balanced"
+                              ? "bg-[#2EE6C9] text-[#0B0E11]"
+                              : "bg-[#A855F7] text-white"
                           : "text-[#6B7A8F] hover:text-white"
                       )}
                     >
-                      {size}
+                      {mode === "economy" ? "Fast" : mode === "balanced" ? "Good" : "Best"}
                     </button>
                   ))}
                 </div>
-              ) : (
-                <span className="text-sm text-white font-medium">9</span>
-              )}
+              </div>
             </div>
 
-            {/* Cost estimate */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[#6B7A8F]">Est. cost:</span>
-              <span className="text-sm text-[#2EE6C9] font-semibold">
-                {formatCost(estimatedCost.totalCents)}
+            {/* Row 2: Model info + Cost */}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-[#4B5563]">
+                {qualityMode === "economy" && "GPT-4o Mini • Basic voice • Fast video"}
+                {qualityMode === "balanced" && "Claude Haiku • ElevenLabs • Runway Gen3"}
+                {qualityMode === "premium" && "Claude Sonnet • ElevenLabs HD • Sora"}
               </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[#6B7A8F]">Est:</span>
+                <span className="text-[#2EE6C9] font-semibold text-sm">
+                  {formatCost(estimatedCost.totalCents)}
+                </span>
+              </div>
             </div>
           </div>
 
