@@ -106,12 +106,12 @@ function FeedPageContent() {
         // Load total spent (sum of all batch costs)
         const { data: batchesData } = await supabase
           .from("batches")
-          .select("estimated_cost")
+          .select("user_charge_cents")
           .eq("user_id", user.id)
-          .not("estimated_cost", "is", null);
-        
+          .not("user_charge_cents", "is", null);
+
         if (batchesData) {
-          const total = batchesData.reduce((sum, b) => sum + (b.estimated_cost || 0), 0);
+          const total = batchesData.reduce((sum, b) => sum + (b.user_charge_cents || 0), 0);
           setTotalSpent(total);
         }
 
