@@ -59,6 +59,21 @@ function FeedPageContent() {
 
   const supabase = createClient();
 
+  const extractFunctionError = (err: unknown): string | null => {
+    if (!err || typeof err !== "object") return null;
+    const anyErr = err as any;
+    const context = anyErr?.context;
+    const body = context?.body;
+    if (!body) return null;
+    try {
+      const parsed = typeof body === "string" ? JSON.parse(body) : body;
+      if (typeof parsed?.error === "string") return parsed.error;
+    } catch {
+      // Ignore JSON parse errors and fall back to generic message
+    }
+    return null;
+  };
+
   // Calculate estimated cost based on current settings
   const estimatedCost = useMemo(() => {
     const batchSize = outputType === "image" ? imageBatchSize : videoBatchSize;
@@ -197,11 +212,12 @@ function FeedPageContent() {
       });
 
       if (error) {
+        const detailed = extractFunctionError(error);
         // Check for insufficient credits error
-        if (error.message?.includes("Insufficient credits")) {
+        if (detailed?.includes("Insufficient credits") || error.message?.includes("Insufficient credits")) {
           throw new Error("Not enough credits. Please add more credits to continue.");
         }
-        throw error;
+        throw new Error(detailed || error.message || "Edge function failed");
       }
 
       // Update session cost (user was charged)
