@@ -214,36 +214,7 @@ function LibraryContent() {
     );
   }
 
-  // Empty state for entire library
-  if (allClips.length === 0) {
-    return (
-      <div className="min-h-screen bg-[#0B0E11]">
-        <header className="sticky top-0 z-40 bg-[#0B0E11]/95 backdrop-blur-lg border-b border-[#1C2230] px-4 py-3">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="p-1 -ml-1 text-[#6B7A8F] hover:text-white">
-              <ChevronLeft className="w-6 h-6" />
-            </Link>
-            <h1 className="text-lg font-semibold text-white">Library</h1>
-          </div>
-        </header>
-        <main className="flex flex-col items-center justify-center min-h-[70vh] px-4">
-          <div className="w-20 h-20 rounded-2xl bg-[#12161D] border border-[#1C2230] flex items-center justify-center mb-6">
-            <span className="text-4xl">📁</span>
-          </div>
-          <p className="text-white font-semibold text-lg mb-2">Your library is empty</p>
-          <p className="text-[#6B7A8F] text-center text-sm mb-6 max-w-xs">
-            Create videos and images on the Feed to see them here
-          </p>
-          <Link
-            href="/"
-            className="px-6 py-3 rounded-xl bg-[#2EE6C9] text-[#0B0E11] font-semibold text-sm hover:opacity-90 transition-opacity"
-          >
-            Start Creating
-          </Link>
-        </main>
-      </div>
-    );
-  }
+  // Note: We always show tabs now, even when empty
 
   return (
     <div className="min-h-screen bg-[#0B0E11]">
@@ -364,23 +335,31 @@ function LibraryContent() {
       {/* Empty state for current tab/filter */}
       {feedClips.length === 0 ? (
         <main className="flex flex-col items-center justify-center min-h-[50vh] px-4">
-          <div className="w-16 h-16 rounded-xl bg-[#12161D] border border-[#1C2230] flex items-center justify-center mb-4">
-            <span className="text-2xl">
+          <div className="w-20 h-20 rounded-2xl bg-[#12161D] border border-[#1C2230] flex items-center justify-center mb-6">
+            <span className="text-4xl">
               {activeTab === "studio" ? "🎬" : "🖼️"}
             </span>
           </div>
-          <p className="text-[#6B7A8F] text-center text-sm">
+          <p className="text-white font-semibold text-lg mb-2">
+            {activeTab === "studio" ? "No videos yet" : "No images yet"}
+          </p>
+          <p className="text-[#6B7A8F] text-center text-sm mb-6 max-w-xs">
             {filter === "winners"
-              ? `No ${activeTab === "studio" ? "videos" : "images"} marked as winners yet`
+              ? `Mark your favorite ${activeTab === "studio" ? "videos" : "images"} as winners to see them here`
               : filter === "killed"
-                ? `No ${activeTab === "studio" ? "videos" : "images"} in trash`
-                : `No ${activeTab === "studio" ? "videos" : "images"} yet`}
+                ? `${activeTab === "studio" ? "Videos" : "Images"} you remove will appear here`
+                : `Create ${activeTab === "studio" ? "videos" : "images"} on the Feed to see them here`}
           </p>
           <Link
             href="/"
-            className="mt-4 text-[#2EE6C9] text-sm font-medium hover:underline"
+            className={cn(
+              "px-6 py-3 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity",
+              activeTab === "studio" 
+                ? "bg-[#2EE6C9] text-[#0B0E11]" 
+                : "bg-[#A855F7] text-white"
+            )}
           >
-            Create {activeTab === "studio" ? "videos" : "images"}
+            Create {activeTab === "studio" ? "Videos" : "Images"}
           </Link>
         </main>
       ) : viewMode === "grid" ? (
