@@ -481,31 +481,119 @@ function FeedPageContent() {
             </div>
           </div>
 
-          {/* Style selector - subtle */}
-          <div className="flex justify-center">
+          {/* Style Enhancement Section - Always Visible */}
+          <div className="space-y-3">
+            {/* Section Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-[#6B7A8F] uppercase tracking-wider">
+                  Style Enhancement
+                </span>
+                {selectedPreset !== "AUTO" && (
+                  <span className="text-[10px] bg-[#2EE6C9]/10 text-[#2EE6C9] px-2 py-0.5 rounded-full">
+                    Custom
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setShowPresets(!showPresets)}
+                disabled={isGenerating || isRunning}
+                className="text-xs text-[#2EE6C9] hover:text-[#2EE6C9]/80 transition-colors disabled:opacity-50"
+              >
+                {showPresets ? "Close" : "Change"}
+              </button>
+            </div>
+
+            {/* Selected Style Card - Always Visible */}
             <button
               onClick={() => setShowPresets(!showPresets)}
               disabled={isGenerating || isRunning}
-              className="text-xs text-[#4B5563] hover:text-[#6B7A8F] transition-colors disabled:opacity-50"
+              className={cn(
+                "w-full p-4 rounded-xl border transition-all",
+                "bg-gradient-to-br from-[#12161D] to-[#0B0E11]",
+                showPresets 
+                  ? "border-[#2EE6C9]/50 ring-1 ring-[#2EE6C9]/20" 
+                  : "border-[#1C2230] hover:border-[#2A3142]",
+                "disabled:opacity-50"
+              )}
             >
-              Style: {selectedPreset === "AUTO" ? "Auto" : presetLabel}
-            </button>
-          </div>
+              <div className="flex items-center gap-4">
+                {/* Style Icon/Preview */}
+                <div className={cn(
+                  "w-12 h-12 rounded-xl flex items-center justify-center text-lg shrink-0",
+                  "bg-gradient-to-br",
+                  selectedPreset === "AUTO" ? "from-[#2EE6C9] to-[#1FB6FF]" :
+                  selectedPreset === "FOUNDERS" ? "from-[#3B82F6] to-[#1D4ED8]" :
+                  selectedPreset === "PODCAST" ? "from-[#8B5CF6] to-[#6D28D9]" :
+                  selectedPreset === "DISCOVERY" ? "from-[#F59E0B] to-[#D97706]" :
+                  selectedPreset === "CAMERA_PUT_DOWN" ? "from-[#EF4444] to-[#B91C1C]" :
+                  selectedPreset === "SENSORY" ? "from-[#10B981] to-[#059669]" :
+                  selectedPreset === "DELAYED_GRATIFICATION" ? "from-[#EC4899] to-[#BE185D]" :
+                  "from-[#64748B] to-[#475569]"
+                )}>
+                  {selectedPreset === "AUTO" ? "✨" :
+                   selectedPreset === "FOUNDERS" ? "💼" :
+                   selectedPreset === "PODCAST" ? "🎙️" :
+                   selectedPreset === "DISCOVERY" ? "🔍" :
+                   selectedPreset === "CAMERA_PUT_DOWN" ? "📱" :
+                   selectedPreset === "SENSORY" ? "🎧" :
+                   selectedPreset === "DELAYED_GRATIFICATION" ? "⏳" : "🎬"}
+                </div>
 
-          {/* Preset Grid */}
-          {showPresets && (
-            <div className="pt-2">
-              <PresetGrid
-                presets={presets}
-                selectedKey={selectedPreset}
-                onSelect={(key) => {
-                  setSelectedPreset(key);
-                  setShowPresets(false);
-                }}
-                disabled={isGenerating || isRunning}
-              />
-            </div>
-          )}
+                {/* Style Info */}
+                <div className="flex-1 text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">
+                      {selectedPreset === "AUTO" ? "Smart Auto" : presetLabel}
+                    </span>
+                    {selectedPreset === "AUTO" && (
+                      <span className="text-[10px] bg-[#2EE6C9]/20 text-[#2EE6C9] px-1.5 py-0.5 rounded font-medium">
+                        RECOMMENDED
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[#6B7A8F] mt-0.5">
+                    {selectedPreset === "AUTO" 
+                      ? "AI picks the best method for your prompt" 
+                      : presets.find(p => p.key === selectedPreset)?.description || "Custom style"}
+                  </p>
+                </div>
+
+                {/* Chevron */}
+                <svg 
+                  className={cn(
+                    "w-5 h-5 text-[#6B7A8F] transition-transform",
+                    showPresets && "rotate-180"
+                  )} 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {/* Expanded Preset Grid */}
+            {showPresets && (
+              <div className="animate-in slide-in-from-top-2 fade-in duration-200">
+                <div className="p-3 rounded-xl bg-[#12161D] border border-[#1C2230]">
+                  <p className="text-xs text-[#6B7A8F] mb-3 text-center">
+                    Choose a content method to enhance your video
+                  </p>
+                  <PresetGrid
+                    presets={presets}
+                    selectedKey={selectedPreset}
+                    onSelect={(key) => {
+                      setSelectedPreset(key);
+                      setShowPresets(false);
+                    }}
+                    disabled={isGenerating || isRunning}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </section>
 
         {/* Workflow - prompt + manufacturing steps only; no video results on feed */}
