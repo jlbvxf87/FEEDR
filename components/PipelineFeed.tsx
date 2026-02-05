@@ -60,6 +60,7 @@ function getCurrentPhase(clips: Clip[], batchStatus: string): string {
   if (statuses.every(s => s === "ready")) return "complete";
   if (statuses.some(s => s === "assembling")) return "assembly";
   if (statuses.some(s => s === "rendering")) return "video";
+  if (statuses.some(s => s === "generating")) return "video";
   if (statuses.some(s => s === "vo")) return "voice";
   if (statuses.some(s => s === "scripting")) return "script";
   if (statuses.some(s => s === "planned")) return "script";
@@ -268,13 +269,13 @@ function generateMessages(
   // ═══════════════════════════════════════════════════════════════
   // PHASE 5: VIDEO - Rendering visuals
   // ═══════════════════════════════════════════════════════════════
-  const renderingClips = clips.filter(c => c.status === "rendering");
-  const hasVideo = clips.some(c => c.raw_video_url);
+  const renderingClips = clips.filter(c => c.status === "rendering" || c.status === "generating");
+  const hasVideo = clips.some(c => c.raw_video_url || c.final_url);
 
   if (renderingClips.length > 0 || hasVideo) {
     clips.forEach((clip, index) => {
       const variantLabel = clip.variant_id || `V${String(index + 1).padStart(2, '0')}`;
-      
+
       if (clip.status === "rendering") {
         messages.push({
           id: `msg-${msgId++}`,
@@ -283,6 +284,17 @@ function generateMessages(
           title: `Rendering ${variantLabel}`,
           message: "Sora is creating your visuals...",
           highlight: "This takes about 30-60 seconds",
+          variant: variantLabel,
+          isActive: true,
+        });
+      } else if (clip.status === "generating") {
+        messages.push({
+          id: `msg-${msgId++}`,
+          phase: "video",
+          emoji: "🎨",
+          title: `Generating ${variantLabel}`,
+          message: "Creating your image with AI...",
+          highlight: "This takes about 10-20 seconds",
           variant: variantLabel,
           isActive: true,
         });

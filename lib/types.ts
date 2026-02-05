@@ -24,7 +24,7 @@ export type PresetKey = MethodKey | LegacyPresetKey;
 
 export type BatchMode = "hook_test" | "angle_test" | "format_test";
 export type BatchSize = 2 | 4 | 6 | 8;
-export type BatchStatus = "queued" | "researching" | "running" | "done" | "failed";
+export type BatchStatus = "queued" | "researching" | "running" | "done" | "failed" | "cancelled";
 export type OutputType = "video" | "image";
 export type ImageType = "product" | "lifestyle" | "ad" | "ugc" | "hero" | "custom";
 
