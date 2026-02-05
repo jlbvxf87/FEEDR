@@ -62,14 +62,23 @@ function FeedPageContent() {
   const extractFunctionError = (err: unknown): string | null => {
     if (!err || typeof err !== "object") return null;
     const anyErr = err as any;
+    // Log full error for debugging
+    console.error("Edge function error details:", JSON.stringify(anyErr, null, 2));
+    // Try context.body (Supabase JS client wraps errors here)
     const context = anyErr?.context;
     const body = context?.body;
-    if (!body) return null;
-    try {
-      const parsed = typeof body === "string" ? JSON.parse(body) : body;
-      if (typeof parsed?.error === "string") return parsed.error;
-    } catch {
-      // Ignore JSON parse errors and fall back to generic message
+    if (body) {
+      try {
+        const parsed = typeof body === "string" ? JSON.parse(body) : body;
+        if (typeof parsed?.error === "string") return parsed.error;
+        if (typeof parsed?.message === "string") return parsed.message;
+      } catch {
+        if (typeof body === "string") return body;
+      }
+    }
+    // Try direct message property
+    if (typeof anyErr?.message === "string" && anyErr.message !== "Edge Function returned a non-2xx status code") {
+      return anyErr.message;
     }
     return null;
   };
