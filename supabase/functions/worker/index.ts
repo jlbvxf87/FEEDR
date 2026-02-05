@@ -39,6 +39,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, operation: string
 }
 
 // Helper to create child jobs idempotently
+// IMPORTANT: Validates that batch/clip still exist before creating jobs
 async function createChildJobIfNotExists(
   supabase: any,
   batchId: string,
@@ -46,6 +47,38 @@ async function createChildJobIfNotExists(
   type: string,
   payload: any
 ): Promise<string | null> {
+  // VALIDATION: Check batch still exists and is not cancelled/deleted
+  const { data: batch, error: batchError } = await supabase
+    .from("batches")
+    .select("id, status")
+    .eq("id", batchId)
+    .single();
+  
+  if (batchError || !batch) {
+    console.warn(`[createChildJob] Batch ${batchId} no longer exists, skipping ${type} job`);
+    return null;
+  }
+  
+  // Skip if batch was cancelled or already failed
+  if (batch.status === "cancelled" || batch.status === "failed") {
+    console.warn(`[createChildJob] Batch ${batchId} is ${batch.status}, skipping ${type} job`);
+    return null;
+  }
+  
+  // VALIDATION: If clip is specified, verify it still exists
+  if (clipId) {
+    const { data: clip, error: clipError } = await supabase
+      .from("clips")
+      .select("id")
+      .eq("id", clipId)
+      .single();
+    
+    if (clipError || !clip) {
+      console.warn(`[createChildJob] Clip ${clipId} no longer exists, skipping ${type} job`);
+      return null;
+    }
+  }
+  
   const { data, error } = await supabase.rpc("create_child_job_if_not_exists", {
     p_batch_id: batchId,
     p_clip_id: clipId,
@@ -54,8 +87,9 @@ async function createChildJobIfNotExists(
   });
   
   if (error) {
-    console.error(`Failed to create ${type} job:`, error.message);
+    console.error(`Failed to create ${type} job via RPC:`, error.message);
     // Fallback to direct insert if RPC not available (backwards compatibility)
+    // But now with explicit ON CONFLICT handling to prevent duplicates
     const { data: inserted, error: insertError } = await supabase
       .from("jobs")
       .insert({
@@ -68,7 +102,14 @@ async function createChildJobIfNotExists(
       .select("id")
       .single();
     
-    if (insertError) throw insertError;
+    if (insertError) {
+      // If it's a duplicate constraint violation, that's fine - job already exists
+      if (insertError.code === "23505") {
+        console.log(`[createChildJob] ${type} job already exists for clip ${clipId}`);
+        return null;
+      }
+      throw insertError;
+    }
     return inserted?.id;
   }
   
@@ -339,14 +380,15 @@ serve(async (req) => {
         error: jobError.message,
       });
 
+      // Return actual error status (not 200!) so the caller knows something failed
       return new Response(
         JSON.stringify({ 
           processed: false, 
           error: jobError.message, 
           job_id: job.id,
-          will_retry: shouldRetry 
+          will_retry: canRetry  // Fixed: was using undefined `shouldRetry`
         }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: canRetry ? 202 : 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -369,13 +411,23 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
   const scriptService = services.getScriptService();
   
   // ═══════════════════════════════════════════════════════════════
-  // COST ESTIMATION: Log estimated costs before expensive operations
+  // VALIDATION: Verify batch is still valid before processing
+  // Prevents zombie jobs from running on deleted/cancelled batches
   // ═══════════════════════════════════════════════════════════════
-  const { data: batchInfo } = await supabase
+  const { data: batchInfo, error: batchError } = await supabase
     .from("batches")
-    .select("batch_size")
+    .select("batch_size, status")
     .eq("id", job.batch_id)
     .single();
+  
+  if (batchError || !batchInfo) {
+    throw new Error(`Batch ${job.batch_id} no longer exists - skipping compile`);
+  }
+  
+  if (batchInfo.status === "cancelled" || batchInfo.status === "failed") {
+    console.log(`[Compile] Batch ${job.batch_id} is ${batchInfo.status}, skipping`);
+    return; // Exit cleanly without creating child jobs
+  }
     
   const batchSize = batchInfo?.batch_size || 4;
   const costEstimate = estimateBatchCost({
@@ -828,6 +880,25 @@ async function handleResearchJob(supabase: any, job: any, services: ReturnType<t
   const researchService = services.getResearchService();
   
   console.log(`[Research] Starting brain analysis for: "${intent_text}"`);
+  
+  // ═══════════════════════════════════════════════════════════════
+  // VALIDATION: Check batch still exists and is valid before processing
+  // This prevents zombie jobs from running on deleted batches
+  // ═══════════════════════════════════════════════════════════════
+  const { data: batch, error: batchError } = await supabase
+    .from("batches")
+    .select("id, status")
+    .eq("id", job.batch_id)
+    .single();
+  
+  if (batchError || !batch) {
+    throw new Error(`Batch ${job.batch_id} no longer exists - aborting research`);
+  }
+  
+  if (batch.status === "cancelled" || batch.status === "failed") {
+    console.log(`[Research] Batch ${job.batch_id} is ${batch.status}, skipping`);
+    return; // Exit cleanly without creating child jobs
+  }
   
   // STEP 0: Detect content category from user prompt
   const category = detectCategory(intent_text);

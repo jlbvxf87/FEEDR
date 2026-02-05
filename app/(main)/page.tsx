@@ -84,10 +84,15 @@ function FeedPageContent() {
         if (presetsError) throw presetsError;
         setPresets((presetsData || []) as Preset[]);
 
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        if (!user?.id) return;
+
         // Load total spent (sum of all batch costs)
         const { data: batchesData } = await supabase
           .from("batches")
           .select("estimated_cost")
+          .eq("user_id", user.id)
           .not("estimated_cost", "is", null);
         
         if (batchesData) {
@@ -99,6 +104,7 @@ function FeedPageContent() {
         const { data: batchData } = await supabase
           .from("batches")
           .select("*")
+          .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(1)
           .single();
