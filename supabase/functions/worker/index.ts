@@ -41,6 +41,28 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, operation: string
   return Promise.race([promise, timeout]);
 }
 
+// Safe RPC wrapper — supabase.rpc() returns a PostgrestFilterBuilder which
+// does NOT have .catch() in the Deno Supabase client. This helper handles
+// RPC errors and falls back gracefully.
+async function safeRpc(
+  supabase: any,
+  rpcName: string,
+  params: Record<string, any>,
+  fallback?: () => Promise<any>
+): Promise<any> {
+  try {
+    const { data, error } = await supabase.rpc(rpcName, params);
+    if (error) {
+      console.warn(`[RPC] ${rpcName} error: ${error.message}`);
+      if (fallback) return await fallback();
+    }
+    return data;
+  } catch (e: any) {
+    console.warn(`[RPC] ${rpcName} threw: ${e?.message || e}`);
+    if (fallback) return await fallback();
+  }
+}
+
 // Helper to create child jobs idempotently
 // IMPORTANT: Validates that batch/clip still exist before creating jobs
 async function createChildJobIfNotExists(
@@ -204,17 +226,15 @@ serve(async (req) => {
     // Check if job has exceeded max retries (RPC already incremented attempts)
     // Video polling jobs are exempt — they re-queue intentionally, not due to errors
     if (job.attempts > MAX_RETRIES && !isVideoPolling) {
-      await supabase.rpc("complete_job", {
+      await safeRpc(supabase, "complete_job", {
         p_job_id: job.id,
         p_status: "failed",
         p_error: `Max retries (${MAX_RETRIES}) exceeded`,
-      }).catch(() => {
-        // Fallback if RPC not available
-        return supabase
-          .from("jobs")
-          .update({ status: "failed", error: `Max retries (${MAX_RETRIES}) exceeded` })
-          .eq("id", job.id);
-      });
+      }, () => supabase
+        .from("jobs")
+        .update({ status: "failed", error: `Max retries (${MAX_RETRIES}) exceeded` })
+        .eq("id", job.id)
+      );
       
       // Mark associated clip as failed
       if (job.clip_id) {
@@ -230,13 +250,9 @@ serve(async (req) => {
     // Start heartbeat for long-running jobs to prevent stuck job detection
     heartbeatInterval = setInterval(async () => {
       try {
-        await supabase.rpc("job_heartbeat", { p_job_id: job.id }).catch(() => {
-          // Fallback if RPC not available
-          return supabase
-            .from("jobs")
-            .update({ updated_at: new Date().toISOString() })
-            .eq("id", job.id);
-        });
+        await safeRpc(supabase, "job_heartbeat", { p_job_id: job.id }, () =>
+          supabase.from("jobs").update({ updated_at: new Date().toISOString() }).eq("id", job.id)
+        );
       } catch (e) {
         console.warn("Heartbeat failed:", e);
       }
@@ -294,16 +310,15 @@ serve(async (req) => {
       });
 
       // Mark job as done using RPC (with fallback)
-      await supabase.rpc("complete_job", {
+      await safeRpc(supabase, "complete_job", {
         p_job_id: job.id,
         p_status: "done",
         p_error: null,
-      }).catch(() => {
-        return supabase
-          .from("jobs")
-          .update({ status: "done", updated_at: new Date().toISOString() })
-          .eq("id", job.id);
-      });
+      }, () => supabase
+        .from("jobs")
+        .update({ status: "done", updated_at: new Date().toISOString() })
+        .eq("id", job.id)
+      );
 
       // Check if batch is complete
       await checkBatchCompletion(supabase, job.batch_id);
@@ -341,20 +356,15 @@ serve(async (req) => {
       if (canRetry) {
         // Put back in queue for retry
         const retryMessage = `[${errorClassification.type}] Attempt ${job.attempts} failed: ${jobError.message}`;
-        await supabase.rpc("complete_job", {
+        await safeRpc(supabase, "complete_job", {
           p_job_id: job.id,
           p_status: "queued",
           p_error: retryMessage,
-        }).catch(() => {
-          return supabase
-            .from("jobs")
-            .update({ 
-              status: "queued", 
-              error: retryMessage,
-              updated_at: new Date().toISOString()
-            })
-            .eq("id", job.id);
-        });
+        }, () => supabase
+          .from("jobs")
+          .update({ status: "queued", error: retryMessage, updated_at: new Date().toISOString() })
+          .eq("id", job.id)
+        );
         console.log(`[Retry] Job ${job.id} queued for retry (attempt ${job.attempts + 1})`);
       } else {
         // Mark as permanently failed - no more retries
@@ -362,20 +372,15 @@ serve(async (req) => {
           ? `Max retries exceeded: ${jobError.message}`
           : `[${errorClassification.type}] ${errorClassification.suggestedAction}: ${jobError.message}`;
           
-        await supabase.rpc("complete_job", {
+        await safeRpc(supabase, "complete_job", {
           p_job_id: job.id,
           p_status: "failed",
           p_error: failReason,
-        }).catch(() => {
-          return supabase
-            .from("jobs")
-            .update({ 
-              status: "failed", 
-              error: failReason,
-              updated_at: new Date().toISOString()
-            })
-            .eq("id", job.id);
-        });
+        }, () => supabase
+          .from("jobs")
+          .update({ status: "failed", error: failReason, updated_at: new Date().toISOString() })
+          .eq("id", job.id)
+        );
         
         // Mark clip as failed with actionable message
         if (job.clip_id) {
@@ -770,23 +775,17 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
     console.log(`[Video Poll] Task still ${statusResult.status}, re-queuing for next poll...`);
 
     // CRITICAL: Preserve payload (contains sora_task_id and sora_submitted_at for timeout guard)
-    await supabase.rpc("complete_job", {
+    await safeRpc(supabase, "complete_job", {
       p_job_id: job.id,
       p_status: "queued",
       p_error: null,
       p_payload: job.payload_json,
       p_reset_attempts: true,
-    }).catch(() => {
-      return supabase
-        .from("jobs")
-        .update({
-          status: "queued",
-          payload_json: job.payload_json,
-          attempts: 0,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", job.id);
-    });
+    }, () => supabase
+      .from("jobs")
+      .update({ status: "queued", payload_json: job.payload_json, attempts: 0, updated_at: new Date().toISOString() })
+      .eq("id", job.id)
+    );
 
     // Throw special signal so the outer handler doesn't mark as "done"
     const pollingSignal: any = new Error("__videoPolling");
@@ -872,24 +871,17 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
         sora_submitted_at: Date.now(),
       };
 
-      await supabase.rpc("complete_job", {
+      await safeRpc(supabase, "complete_job", {
         p_job_id: job.id,
         p_status: "queued",
         p_error: null,
         p_payload: updatedPayload,
         p_reset_attempts: true,
-      }).catch(() => {
-        // Fallback: direct update if new RPC signature not yet deployed
-        return supabase
-          .from("jobs")
-          .update({
-            status: "queued",
-            payload_json: updatedPayload,
-            attempts: 0,
-            updated_at: new Date().toISOString()
-          })
-          .eq("id", job.id);
-      });
+      }, () => supabase
+        .from("jobs")
+        .update({ status: "queued", payload_json: updatedPayload, attempts: 0, updated_at: new Date().toISOString() })
+        .eq("id", job.id)
+      );
 
       console.log(`[Video Submit] Job re-queued with task_id for polling`);
 
@@ -1451,14 +1443,13 @@ async function checkBatchCompletion(supabase: any, batchId: string) {
         console.log(`Full refund for batch ${batchId} (all clips failed)`);
       } else {
         // Partial failure → proportional refund for failed clips only
-        await supabase.rpc("partial_refund_batch", {
+        await safeRpc(supabase, "partial_refund_batch", {
           p_batch_id: batchId,
           p_failed_count: failedCount,
           p_total_count: totalCount,
-        }).catch(() => {
-          // Fallback to full refund if partial_refund_batch not deployed yet
+        }, () => {
           console.warn(`partial_refund_batch RPC not available, using full refund`);
-          return supabase.rpc("refund_batch", { p_batch_id: batchId });
+          return safeRpc(supabase, "refund_batch", { p_batch_id: batchId });
         });
         console.log(`Partial refund for batch ${batchId}: ${failedCount}/${totalCount} clips failed`);
       }

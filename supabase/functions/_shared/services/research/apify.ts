@@ -244,8 +244,8 @@ export class ApifyResearchService implements ResearchService {
     const categoryConfig = CATEGORY_DETECTION[category];
     if (!categoryConfig) return true;
     
-    const videoHashtags = video.hashtags.map(h => h.toLowerCase());
-    const categoryHashtags = categoryConfig.hashtags.map(h => h.toLowerCase());
+    const videoHashtags = (video.hashtags || []).filter(h => typeof h === "string").map(h => h.toLowerCase());
+    const categoryHashtags = (categoryConfig.hashtags || []).filter(h => typeof h === "string").map(h => h.toLowerCase());
     
     const hasRelevantHashtag = videoHashtags.some(h => 
       categoryHashtags.some(ch => h.includes(ch) || ch.includes(h))
