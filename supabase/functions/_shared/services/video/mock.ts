@@ -17,6 +17,20 @@ export class MockVideoService implements VideoService {
   readonly maxDuration = 60;
   readonly supportedAspectRatios = ["9:16", "16:9", "1:1"];
 
+  async submitVideo(params: VideoGenerationParams): Promise<string> {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    return `mock-task-${Date.now()}`;
+  }
+
+  async downloadAndUploadVideo(videoUrl: string, clipId: string): Promise<VideoOutput> {
+    return {
+      raw_video_url: videoUrl,
+      duration_seconds: 15,
+      width: 1080,
+      height: 1920,
+    };
+  }
+
   async generateVideo(params: VideoGenerationParams): Promise<VideoOutput> {
     const { prompt, clip_id, duration = 15 } = params;
     

@@ -8,7 +8,9 @@ const nextConfig = {
       },
     ],
   },
-  serverExternalPackages: ['iceberg-js'],
+  experimental: {
+    serverComponentsExternalPackages: ['iceberg-js'],
+  },
 };
 
 export default nextConfig;

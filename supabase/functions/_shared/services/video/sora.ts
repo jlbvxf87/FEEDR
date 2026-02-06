@@ -22,6 +22,71 @@ export class SoraVideoService implements VideoService {
     }
   }
 
+  /**
+   * Submit a video generation task — returns task_id immediately, no polling.
+   * Used by the async submit+poll pattern in the worker.
+   */
+  async submitVideo(params: VideoGenerationParams): Promise<string> {
+    const { prompt, duration = 15, aspect_ratio = "9:16" } = params;
+
+    const kieAspectRatio = aspect_ratio === "9:16" ? "portrait" : "landscape";
+    const nFrames = duration <= 10 ? "10" : "15";
+
+    console.log(`[Sora Submit] Submitting to KIE.AI: ${prompt.substring(0, 50)}...`);
+
+    const submitResponse = await fetch(`${KIE_API_BASE}/sora2-pro/text-to-video`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt,
+        aspect_ratio: kieAspectRatio,
+        n_frames: nFrames,
+        size: "high",
+        remove_watermark: true,
+      }),
+    });
+
+    if (!submitResponse.ok) {
+      const error = await submitResponse.text();
+      throw new Error(`KIE.AI submit error: ${submitResponse.status} - ${error}`);
+    }
+
+    const submitData = await submitResponse.json();
+    const taskId = submitData.data?.task_id || submitData.task_id || submitData.id;
+
+    if (!taskId) {
+      throw new Error(`KIE.AI response missing task_id: ${JSON.stringify(submitData)}`);
+    }
+
+    console.log(`[Sora Submit] Task started: ${taskId}`);
+    return taskId;
+  }
+
+  /**
+   * Download a completed video and upload it to Supabase storage.
+   */
+  async downloadAndUploadVideo(videoUrl: string, clipId: string): Promise<VideoOutput> {
+    console.log(`[Sora Download] Downloading video for clip ${clipId}`);
+
+    const videoResponse = await fetch(videoUrl);
+    if (!videoResponse.ok) {
+      throw new Error("Failed to download generated video from KIE.AI");
+    }
+
+    const videoData = await videoResponse.arrayBuffer();
+    const raw_video_url = await uploadVideo("raw", clipId, videoData);
+
+    return {
+      raw_video_url,
+      duration_seconds: 15,
+      width: 1080,
+      height: 1920,
+    };
+  }
+
   async generateVideo(params: VideoGenerationParams): Promise<VideoOutput> {
     const { prompt, clip_id, duration = 15, aspect_ratio = "9:16" } = params;
     
@@ -144,7 +209,9 @@ export class SoraVideoService implements VideoService {
       });
 
       if (!response.ok) {
-        return { status: "failed", error: "Failed to check status" };
+        const errorText = await response.text().catch(() => "unknown");
+        console.error(`[Sora Status] Check failed: ${response.status} - ${errorText}`);
+        return { status: "failed", error: `Status check failed: ${response.status}` };
       }
 
       const data = await response.json();

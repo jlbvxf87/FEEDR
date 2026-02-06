@@ -308,9 +308,18 @@ serve(async (req) => {
     } catch (jobError: any) {
       // Stop heartbeat on error
       if (heartbeatInterval) clearInterval(heartbeatInterval);
-      
+
+      // VIDEO POLLING SIGNAL: Job was re-queued for async polling, not a real error
+      if (jobError?.__videoPolling) {
+        console.log(`[Video] Job ${job.id} re-queued for async polling (not an error)`);
+        return new Response(
+          JSON.stringify({ processed: true, job_id: job.id, job_type: job.type, polling: true }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       console.error(`Job ${job.id} error:`, jobError.message);
-      
+
       // SMART RETRY: Classify error to determine if we should retry
       const errorClassification = classifyError(jobError);
       console.log(`[Error] Type: ${errorClassification.type}, Should retry: ${errorClassification.shouldRetry}`);
@@ -594,95 +603,225 @@ async function handleTtsJob(supabase: any, job: any, services: ReturnType<typeof
 }
 
 // Handle video job - generates raw video using AI service
+// Uses async submit+poll pattern: submits to Sora, re-queues job, polls on next invocation
 async function handleVideoJob(supabase: any, job: any, services: ReturnType<typeof getServices>) {
   const videoService = services.getVideoService();
-  
+
   // Get clip details including script for quality check
   const { data: clip, error: clipError } = await supabase
     .from("clips")
     .select("sora_prompt, raw_video_url, script_spoken, preset_key")
     .eq("id", job.clip_id)
     .single();
-  
+
   if (clipError) throw clipError;
   if (!clip?.sora_prompt) throw new Error("No video prompt found for clip");
-  
+
   // IDEMPOTENCY: Skip if video already generated (from previous partial run)
   let raw_video_url = clip.raw_video_url;
-  let duration_seconds = job.payload_json.duration_seconds || 15;
-  
-  if (!raw_video_url) {
+  let duration_seconds = job.payload_json?.duration_seconds || 15;
+
+  if (raw_video_url) {
+    console.log(`Clip ${job.clip_id} already has raw video, skipping generation`);
+    // IDEMPOTENT: Create assemble job only if it doesn't already exist
+    await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", {
+      duration_seconds
+    });
+    return;
+  }
+
+  // Check if we already have a task_id from a previous submit (Phase 2: Poll)
+  const existingTaskId = job.payload_json?.sora_task_id;
+
+  if (existingTaskId) {
     // ═══════════════════════════════════════════════════════════════
-    // QUALITY GATE: Pre-flight check before expensive Sora generation
-    // This prevents wasting money on low-quality prompts
+    // PHASE 2: POLL — Check status of previously submitted Sora task
     // ═══════════════════════════════════════════════════════════════
+    console.log(`[Video Poll] Checking Sora task ${existingTaskId} for clip ${job.clip_id}`);
+
+    if (!videoService.checkStatus) {
+      throw new Error("Video service does not support checkStatus");
+    }
+
+    const statusResult = await videoService.checkStatus(existingTaskId);
+    console.log(`[Video Poll] Task ${existingTaskId} status: ${statusResult.status}`);
+
+    if (statusResult.status === "completed") {
+      // Video is ready — download and upload to storage
+      const videoUrl = statusResult.result?.raw_video_url;
+      if (!videoUrl) {
+        throw new Error(`Sora task completed but no video URL returned`);
+      }
+
+      console.log(`[Video Poll] Sora video ready, downloading...`);
+
+      let uploadResult;
+      if (videoService.downloadAndUploadVideo) {
+        uploadResult = await videoService.downloadAndUploadVideo(videoUrl, job.clip_id);
+      } else {
+        // Fallback: just use the URL directly
+        uploadResult = { raw_video_url: videoUrl, duration_seconds };
+      }
+
+      raw_video_url = uploadResult.raw_video_url;
+      duration_seconds = uploadResult.duration_seconds || duration_seconds;
+
+      // Update clip with video URL
+      await supabase
+        .from("clips")
+        .update({
+          raw_video_url,
+          video_service: videoService.name,
+        })
+        .eq("id", job.clip_id);
+
+      console.log(`[Video Poll] Video saved for clip ${job.clip_id}`);
+
+      // Create assemble job
+      await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", {
+        duration_seconds
+      });
+      return; // Done! Job will be marked "done" by the outer handler
+    }
+
+    if (statusResult.status === "failed") {
+      throw new Error(`Sora generation failed: ${statusResult.error || "Unknown error"}`);
+    }
+
+    // Still processing or pending — re-queue job to poll again next cycle
+    console.log(`[Video Poll] Task still ${statusResult.status}, re-queuing for next poll...`);
+
+    await supabase.rpc("complete_job", {
+      p_job_id: job.id,
+      p_status: "queued",
+      p_error: null,
+    }).catch(() => {
+      return supabase
+        .from("jobs")
+        .update({
+          status: "queued",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", job.id);
+    });
+
+    // Throw special signal so the outer handler doesn't mark as "done"
+    const pollingSignal: any = new Error("__videoPolling");
+    pollingSignal.__videoPolling = true;
+    throw pollingSignal;
+
+  } else {
+    // ═══════════════════════════════════════════════════════════════
+    // PHASE 1: SUBMIT — Validate prompt and submit to Sora
+    // ═══════════════════════════════════════════════════════════════
+    console.log(`[Video Submit] Starting video generation for clip ${job.clip_id}`);
+
+    // Quality gate: pre-flight check before expensive Sora generation
     const soraValidation = validateSoraPrompt(clip.sora_prompt, clip.preset_key);
     console.log(`[Video] Sora prompt quality: ${soraValidation.score}/100`);
-    
+
     let finalPrompt = clip.sora_prompt;
-    
+
     // If prompt quality is below threshold, enhance it
     if (soraValidation.score < 60) {
       console.log(`[Video] Enhancing low-quality prompt (score: ${soraValidation.score})`);
       finalPrompt = enhanceSoraPrompt(clip.sora_prompt, clip.preset_key);
-      
-      // Update clip with enhanced prompt for transparency
+
       await supabase
         .from("clips")
         .update({ sora_prompt: finalPrompt })
         .eq("id", job.clip_id);
-        
+
       console.log(`[Video] Enhanced prompt saved to clip`);
     }
-    
+
     // Log any warnings (but don't block)
     if (soraValidation.warnings.length > 0) {
       console.warn(`[Video] Prompt warnings: ${soraValidation.warnings.join(", ")}`);
     }
-    
-    // If there are critical issues (score < 40), this is likely to fail
+
     if (soraValidation.score < 40) {
       console.error(`[Video] Prompt quality critically low (${soraValidation.score}/100). Issues: ${soraValidation.issues.join(", ")}`);
-      // Don't block, but log for monitoring
     }
-    
+
     // Update clip status to rendering
     await supabase
       .from("clips")
       .update({ status: "rendering" })
       .eq("id", job.clip_id);
-    
-    // Generate video using AI service with validated/enhanced prompt
-    const result = await withTimeout(
-      videoService.generateVideo({
+
+    // Check if the service supports async submit
+    if (videoService.submitVideo) {
+      // ASYNC PATH: Submit and re-queue for polling
+      const taskId = await videoService.submitVideo({
         prompt: finalPrompt,
         clip_id: job.clip_id,
         duration: duration_seconds,
         aspect_ratio: "9:16",
-      }),
-      45000, // 45s timeout for video
-      "Video generation"
-    );
-    
-    raw_video_url = result.raw_video_url;
-    duration_seconds = result.duration_seconds;
-    
-    // Update clip with video URL
-    await supabase
-      .from("clips")
-      .update({ 
-        raw_video_url,
-        video_service: videoService.name,
-      })
-      .eq("id", job.clip_id);
-  } else {
-    console.log(`Clip ${job.clip_id} already has raw video, skipping generation`);
+      });
+
+      console.log(`[Video Submit] Sora task submitted: ${taskId}`);
+
+      // Save task_id to job payload and re-queue for polling
+      const updatedPayload = { ...job.payload_json, sora_task_id: taskId };
+
+      await supabase.rpc("complete_job", {
+        p_job_id: job.id,
+        p_status: "queued",
+        p_error: null,
+      }).catch(() => {
+        return supabase
+          .from("jobs")
+          .update({
+            status: "queued",
+            payload_json: updatedPayload,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", job.id);
+      });
+
+      // Also update payload_json via direct update (complete_job RPC may not update payload)
+      await supabase
+        .from("jobs")
+        .update({ payload_json: updatedPayload })
+        .eq("id", job.id);
+
+      console.log(`[Video Submit] Job re-queued with task_id for polling`);
+
+      // Throw polling signal so outer handler doesn't mark as "done"
+      const pollingSignal: any = new Error("__videoPolling");
+      pollingSignal.__videoPolling = true;
+      throw pollingSignal;
+
+    } else {
+      // SYNC PATH (fallback for mock service): Generate in one shot
+      const result = await withTimeout(
+        videoService.generateVideo({
+          prompt: finalPrompt,
+          clip_id: job.clip_id,
+          duration: duration_seconds,
+          aspect_ratio: "9:16",
+        }),
+        45000,
+        "Video generation"
+      );
+
+      raw_video_url = result.raw_video_url;
+      duration_seconds = result.duration_seconds || duration_seconds;
+
+      await supabase
+        .from("clips")
+        .update({
+          raw_video_url,
+          video_service: videoService.name,
+        })
+        .eq("id", job.clip_id);
+
+      await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", {
+        duration_seconds
+      });
+    }
   }
-  
-  // IDEMPOTENT: Create assemble job only if it doesn't already exist
-  await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", { 
-    duration_seconds 
-  });
 }
 
 // Handle assemble job - final assembly using AI service

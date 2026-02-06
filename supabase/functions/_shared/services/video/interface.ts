@@ -123,11 +123,22 @@ export interface VideoService {
   readonly supportedAspectRatios: string[];
   
   /**
-   * Generate video from prompt
+   * Generate video from prompt (synchronous - blocks until done)
    * Returns URL to video file in storage
    */
   generateVideo(params: VideoGenerationParams): Promise<VideoOutput>;
-  
+
+  /**
+   * Submit a video generation task (async - returns immediately with task ID)
+   * Used for services that take minutes (Sora, Runway, etc.)
+   */
+  submitVideo?(params: VideoGenerationParams): Promise<string>;
+
+  /**
+   * Download a completed video and upload to Supabase storage
+   */
+  downloadAndUploadVideo?(videoUrl: string, clipId: string): Promise<VideoOutput>;
+
   /**
    * Check status of an ongoing generation (for async services)
    */
