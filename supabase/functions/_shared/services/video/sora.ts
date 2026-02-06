@@ -218,11 +218,16 @@ export class SoraVideoService implements VideoService {
       if (!response.ok) {
         const errorText = await response.text().catch(() => "unknown");
         console.error(`[Sora Status] Check failed: ${response.status} - ${errorText}`);
-        return { status: "failed", error: `Status check failed: ${response.status}` };
+        // IMPORTANT: Network/API errors are transient — return "processing" to retry,
+        // NOT "failed" which would permanently kill the job
+        return { status: "processing", error: `Status check HTTP ${response.status}` };
       }
 
       const data = await response.json();
       const state = data.data?.state || data.state;
+
+      // Log full response for debugging
+      console.log(`[Sora Status] Task ${taskId} raw state: "${state}", full: ${JSON.stringify(data).substring(0, 300)}`);
 
       // Map KIE unified states to our internal states
       const statusMap: Record<string, "pending" | "processing" | "completed" | "failed"> = {
@@ -236,15 +241,24 @@ export class SoraVideoService implements VideoService {
         "success": "completed",
         "completed": "completed",
         "succeeded": "completed",
+        "done": "completed",
+        "finish": "completed",
         "fail": "failed",
         "failed": "failed",
         "error": "failed",
       };
 
+      const mappedStatus = statusMap[state] || "processing";
+
+      // Warn if we see an unmapped state
+      if (state && !statusMap[state]) {
+        console.warn(`[Sora Status] Unknown KIE.AI state "${state}", treating as processing`);
+      }
+
       const videoUrl = this.extractVideoUrl(data);
 
       return {
-        status: statusMap[state] || "processing",
+        status: mappedStatus,
         progress: data.data?.progress || data.progress,
         result: videoUrl ? {
           raw_video_url: videoUrl,
@@ -253,7 +267,9 @@ export class SoraVideoService implements VideoService {
         error: data.data?.failMsg || data.data?.error || data.error,
       };
     } catch (error) {
-      return { status: "failed", error: String(error) };
+      // Network errors are transient — don't permanently fail, just retry
+      console.error(`[Sora Status] Network error checking task ${taskId}:`, error);
+      return { status: "processing", error: `Network error: ${String(error)}` };
     }
   }
 

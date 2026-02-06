@@ -669,7 +669,7 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
     // ═══════════════════════════════════════════════════════════════
     // PHASE 2: POLL — Check status of previously submitted Sora task
     // ═══════════════════════════════════════════════════════════════
-    console.log(`[Video Poll] Checking Sora task ${existingTaskId} for clip ${job.clip_id}`);
+    console.log(`[Video Poll] Checking Sora task ${existingTaskId} for clip ${job.clip_id} (payload keys: ${Object.keys(job.payload_json || {}).join(",")}, submitted_at: ${job.payload_json?.sora_submitted_at || "MISSING"})`);
 
     // TIMEOUT GUARD: Prevent infinite polling if Sora never responds
     // Check job payload first, fall back to clip's created_at as safety net
@@ -690,7 +690,7 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
     }
 
     const statusResult = await videoService.checkStatus(existingTaskId);
-    console.log(`[Video Poll] Task ${existingTaskId} status: ${statusResult.status}`);
+    console.log(`[Video Poll] Task ${existingTaskId} status: ${statusResult.status}, error: ${statusResult.error || "none"}, hasUrl: ${!!statusResult.result?.raw_video_url}`);
 
     if (statusResult.status === "completed") {
       // Video is ready — download and upload to storage
