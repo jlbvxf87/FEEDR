@@ -26,8 +26,8 @@ const STEP_TIMES = {
   research: 45,  // Brain + Apify scraping + analysis
   script: 10,
   voice: 12,
-  video: 180, // Sora takes 1-5 minutes; use 3 min midpoint
-  merge: 8,
+  video: 270, // Sora takes 3-5 minutes; use 4.5 min for realistic estimate
+  merge: 15,
   output: 0,
   prompt: 10,
   generate: 30,
@@ -105,9 +105,10 @@ const STATUS_MESSAGES: Record<string, string[]> = {
     "Adding the right energy...",
   ],
   video: [
-    "Sora is creating your visuals...",
-    "Rendering video content...",
+    "Sora is generating your video (3-5 min)...",
+    "AI is rendering your visuals...",
     "This is where magic happens...",
+    "Still rendering — Sora needs time for quality...",
   ],
   merge: [
     "Putting it all together...",
@@ -358,7 +359,10 @@ export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPane
             {!allDone && estimatedRemaining > 0 && (
               <p className="text-xs text-[#6B7A8F]">~{formatTime(estimatedRemaining)} left</p>
             )}
-            {isOvertime && (
+            {isOvertime && activeNode?.id === "video" && (
+              <p className="text-xs text-[#6B7A8F]">Sora is still rendering...</p>
+            )}
+            {isOvertime && activeNode?.id !== "video" && (
               <p className="text-xs text-[#F59E0B]">Taking a bit longer...</p>
             )}
             {allDone && (
