@@ -1,5 +1,6 @@
 // FEEDR - Service Registry
 // Central registry for all AI service implementations
+// All services default to production — no mock fallbacks
 
 import { ScriptService } from "./script/interface.ts";
 import { VoiceService } from "./voice/interface.ts";
@@ -8,44 +9,34 @@ import { ImageService } from "./image/interface.ts";
 import { AssemblyService } from "./assembly/interface.ts";
 import { ResearchService } from "./research/interface.ts";
 
-// Import mock implementations
-import { MockScriptService } from "./script/mock.ts";
-import { MockVoiceService } from "./voice/mock.ts";
-import { MockVideoService } from "./video/mock.ts";
-import { MockAssemblyService } from "./assembly/mock.ts";
-import { MockResearchService } from "./research/mock.ts";
-
-// Import real implementations
+// Import production implementations
 import { OpenAIScriptService } from "./script/openai.ts";
 import { ClaudeScriptService } from "./script/claude.ts";
 import { ElevenLabsVoiceService } from "./voice/elevenlabs.ts";
 import { OpenAITTSService } from "./voice/openai-tts.ts";
 import { SoraVideoService } from "./video/sora.ts";
 import { ApifyResearchService } from "./research/apify.ts";
-import { FFmpegAssemblyService } from "./assembly/ffmpeg.ts";
 import { ShotstackAssemblyService } from "./assembly/shotstack.ts";
-
-// Import image implementations
-import { MockImageService } from "./image/mock.ts";
 import { DalleImageService } from "./image/dalle.ts";
 
 // Service type identifiers
 export type ServiceType = "script" | "voice" | "video" | "image" | "assembly" | "research";
 
 // Available service implementations
-export type ScriptServiceName = "mock" | "openai" | "claude";
-export type VoiceServiceName = "mock" | "elevenlabs" | "openai";
-export type VideoServiceName = "mock" | "sora";
-export type ImageServiceName = "mock" | "dalle";
-export type AssemblyServiceName = "mock" | "ffmpeg" | "shotstack";
-export type ResearchServiceName = "mock" | "apify";
+export type ScriptServiceName = "openai" | "claude";
+export type VoiceServiceName = "elevenlabs" | "openai";
+export type VideoServiceName = "sora";
+export type ImageServiceName = "dalle";
+export type AssemblyServiceName = "shotstack";
+export type ResearchServiceName = "apify";
 
 /**
  * Service Registry - Creates and manages AI service instances
+ * All services use production implementations. No mock fallbacks.
  */
 export class ServiceRegistry {
   private static instance: ServiceRegistry;
-  
+
   private scriptService: ScriptService | null = null;
   private voiceService: VoiceService | null = null;
   private videoService: VideoService | null = null;
@@ -64,10 +55,11 @@ export class ServiceRegistry {
 
   /**
    * Get script generation service
+   * Default: claude (best quality). Alternative: openai
    */
   getScriptService(): ScriptService {
     if (!this.scriptService) {
-      const serviceName = Deno.env.get("SCRIPT_SERVICE") || "mock";
+      const serviceName = Deno.env.get("SCRIPT_SERVICE") || "claude";
       this.scriptService = this.createScriptService(serviceName as ScriptServiceName);
     }
     return this.scriptService;
@@ -75,10 +67,11 @@ export class ServiceRegistry {
 
   /**
    * Get voice generation service
+   * Default: elevenlabs. Alternative: openai
    */
   getVoiceService(): VoiceService {
     if (!this.voiceService) {
-      const serviceName = Deno.env.get("VOICE_SERVICE") || "mock";
+      const serviceName = Deno.env.get("VOICE_SERVICE") || "elevenlabs";
       this.voiceService = this.createVoiceService(serviceName as VoiceServiceName);
     }
     return this.voiceService;
@@ -86,10 +79,11 @@ export class ServiceRegistry {
 
   /**
    * Get video generation service
+   * Default: sora (KIE.AI Sora 2 Pro)
    */
   getVideoService(): VideoService {
     if (!this.videoService) {
-      const serviceName = Deno.env.get("VIDEO_SERVICE") || "mock";
+      const serviceName = Deno.env.get("VIDEO_SERVICE") || "sora";
       this.videoService = this.createVideoService(serviceName as VideoServiceName);
     }
     return this.videoService;
@@ -97,10 +91,11 @@ export class ServiceRegistry {
 
   /**
    * Get image generation service
+   * Default: dalle
    */
   getImageService(): ImageService {
     if (!this.imageService) {
-      const serviceName = Deno.env.get("IMAGE_SERVICE") || "mock";
+      const serviceName = Deno.env.get("IMAGE_SERVICE") || "dalle";
       this.imageService = this.createImageService(serviceName as ImageServiceName);
     }
     return this.imageService;
@@ -108,10 +103,11 @@ export class ServiceRegistry {
 
   /**
    * Get assembly service
+   * Default: shotstack
    */
   getAssemblyService(): AssemblyService {
     if (!this.assemblyService) {
-      const serviceName = Deno.env.get("ASSEMBLY_SERVICE") || "mock";
+      const serviceName = Deno.env.get("ASSEMBLY_SERVICE") || "shotstack";
       this.assemblyService = this.createAssemblyService(serviceName as AssemblyServiceName);
     }
     return this.assemblyService;
@@ -119,10 +115,11 @@ export class ServiceRegistry {
 
   /**
    * Get research service
+   * Default: apify
    */
   getResearchService(): ResearchService {
     if (!this.researchService) {
-      const serviceName = Deno.env.get("RESEARCH_SERVICE") || "mock";
+      const serviceName = Deno.env.get("RESEARCH_SERVICE") || "apify";
       this.researchService = this.createResearchService(serviceName as ResearchServiceName);
     }
     return this.researchService;
@@ -149,65 +146,35 @@ export class ServiceRegistry {
       case "openai":
         return new OpenAIScriptService();
       case "claude":
-        return new ClaudeScriptService();
-      case "mock":
       default:
-        return new MockScriptService();
+        return new ClaudeScriptService();
     }
   }
 
   private createVoiceService(name: VoiceServiceName): VoiceService {
     switch (name) {
-      case "elevenlabs":
-        return new ElevenLabsVoiceService();
       case "openai":
         return new OpenAITTSService();
-      case "mock":
+      case "elevenlabs":
       default:
-        return new MockVoiceService();
+        return new ElevenLabsVoiceService();
     }
   }
 
-  private createVideoService(name: VideoServiceName): VideoService {
-    switch (name) {
-      case "sora":
-        return new SoraVideoService();
-      case "mock":
-      default:
-        return new MockVideoService();
-    }
+  private createVideoService(_name: VideoServiceName): VideoService {
+    return new SoraVideoService();
   }
 
-  private createImageService(name: ImageServiceName): ImageService {
-    switch (name) {
-      case "dalle":
-        return new DalleImageService();
-      case "mock":
-      default:
-        return new MockImageService();
-    }
+  private createImageService(_name: ImageServiceName): ImageService {
+    return new DalleImageService();
   }
 
-  private createAssemblyService(name: AssemblyServiceName): AssemblyService {
-    switch (name) {
-      case "ffmpeg":
-        return new FFmpegAssemblyService();
-      case "shotstack":
-        return new ShotstackAssemblyService();
-      case "mock":
-      default:
-        return new MockAssemblyService();
-    }
+  private createAssemblyService(_name: AssemblyServiceName): AssemblyService {
+    return new ShotstackAssemblyService();
   }
 
-  private createResearchService(name: ResearchServiceName): ResearchService {
-    switch (name) {
-      case "apify":
-        return new ApifyResearchService();
-      case "mock":
-      default:
-        return new MockResearchService();
-    }
+  private createResearchService(_name: ResearchServiceName): ResearchService {
+    return new ApifyResearchService();
   }
 }
 
