@@ -27,9 +27,10 @@ export const MODEL_COSTS = {
     "openai-tts-1-hd": { perChar: 0.03, quality: 0.85 },
   },
   
-  // Video models (cost per second in cents)
+  // Video models (cost per video in cents, by duration)
+  // KIE.AI charges flat rates: 10s and 15s tiers
   video: {
-    "sora": { perSecond: 5, quality: 0.95 },
+    "sora": { per10s: 100, per15s: 150, quality: 0.95 },
   },
   
   // Image models (cost per image in cents)
@@ -115,9 +116,11 @@ export function estimateVideoCost(
   const voiceCosts = MODEL_COSTS.voice[tier.voiceModel as keyof typeof MODEL_COSTS.voice];
   const voiceCost = voiceCosts ? scriptLength * voiceCosts.perChar : 2;
   
-  // Video cost
+  // Video cost (flat rate per duration tier: 10s or 15s)
   const videoCosts = MODEL_COSTS.video[tier.videoModel as keyof typeof MODEL_COSTS.video];
-  const videoCost = videoCosts ? durationSeconds * videoCosts.perSecond : 25;
+  const videoCost = videoCosts
+    ? (durationSeconds <= 10 ? videoCosts.per10s : videoCosts.per15s)
+    : 150;
   
   // Assembly cost
   const assemblyCost = 5;

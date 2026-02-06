@@ -22,8 +22,12 @@ export const COST_PER_OPERATION = {
   elevenlabs_voice: 0.05,       // ~$0.05 per 15s voice
   
   // Video phase (EXPENSIVE - gate carefully!)
-  sora_15s: 0.50,               // ~$0.50 per 15s video
-  sora_10s: 0.35,               // ~$0.35 per 10s video
+  // KIE.AI Sora 2 Pro HD: flat per-video pricing by duration tier
+  sora_15s: 1.50,               // $1.50 per 15s video (KIE.AI flat rate)
+  sora_10s: 1.00,               // $1.00 per 10s video (KIE.AI flat rate)
+
+  // Post-processing
+  watermark_removal: 0.05,      // ~$0.05 per video
   
   // Assembly phase (moderate)
   shotstack_render: 0.10,       // ~$0.10 per render
@@ -406,9 +410,10 @@ export function preFlightVideoCheck(params: {
   warnings.push(...soraValidation.warnings);
   
   // 3. Cost check
-  const estimatedCost = COST_PER_OPERATION.sora_15s + 
+  const estimatedCost = COST_PER_OPERATION.sora_15s +
                         COST_PER_OPERATION.shotstack_render +
-                        COST_PER_OPERATION.elevenlabs_voice;
+                        COST_PER_OPERATION.elevenlabs_voice +
+                        COST_PER_OPERATION.watermark_removal;
   
   if (params.userCredits !== undefined && params.userCredits < estimatedCost * 100) {
     blockers.push(`Insufficient credits: need ~$${estimatedCost.toFixed(2)}, have $${(params.userCredits / 100).toFixed(2)}`);
