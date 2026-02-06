@@ -194,8 +194,13 @@ serve(async (req) => {
 
     jobId = job.id;
 
+    // Check if this is a video polling job (has sora_task_id in payload)
+    // Polling re-queues are NOT retries — they're intentional async continuations
+    const isVideoPolling = job.type === "video" && job.payload_json?.sora_task_id;
+
     // Check if job has exceeded max retries (RPC already incremented attempts)
-    if (job.attempts > MAX_RETRIES) {
+    // Video polling jobs are exempt — they re-queue intentionally, not due to errors
+    if (job.attempts > MAX_RETRIES && !isVideoPolling) {
       await supabase.rpc("complete_job", {
         p_job_id: job.id,
         p_status: "failed",
@@ -695,11 +700,14 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
       p_job_id: job.id,
       p_status: "queued",
       p_error: null,
+      p_payload: null,
+      p_reset_attempts: true,
     }).catch(() => {
       return supabase
         .from("jobs")
         .update({
           status: "queued",
+          attempts: 0,
           updated_at: new Date().toISOString()
         })
         .eq("id", job.id);
@@ -769,22 +777,20 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
         p_job_id: job.id,
         p_status: "queued",
         p_error: null,
+        p_payload: updatedPayload,
+        p_reset_attempts: true,
       }).catch(() => {
+        // Fallback: direct update if new RPC signature not yet deployed
         return supabase
           .from("jobs")
           .update({
             status: "queued",
             payload_json: updatedPayload,
+            attempts: 0,
             updated_at: new Date().toISOString()
           })
           .eq("id", job.id);
       });
-
-      // Also update payload_json via direct update (complete_job RPC may not update payload)
-      await supabase
-        .from("jobs")
-        .update({ payload_json: updatedPayload })
-        .eq("id", job.id);
 
       console.log(`[Video Submit] Job re-queued with task_id for polling`);
 

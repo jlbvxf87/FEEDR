@@ -25,7 +25,7 @@ const STEP_TIMES = {
   research: 45,  // Brain + Apify scraping + analysis
   script: 10,
   voice: 12,
-  video: 45,
+  video: 180, // Sora takes 1-5 minutes; use 3 min midpoint
   merge: 8,
   output: 0,
   prompt: 10,
@@ -287,17 +287,29 @@ export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
     
     let remaining = 0;
     for (let i = activeIndex; i < nodes.length; i++) {
-      remaining += nodes[i].estimatedSeconds * totalCount;
+      // Video and research steps run in parallel across clips; don't multiply by count
+      const parallelSteps = ["video", "research", "generate"];
+      const multiplier = parallelSteps.includes(nodes[i].id) ? 1 : totalCount;
+      remaining += nodes[i].estimatedSeconds * multiplier;
     }
     return Math.max(0, remaining);
   }, [nodes, allDone, totalCount]);
 
-  // Progress percentage
+  // Progress percentage (time-weighted so video step doesn't show misleading 57%)
   const progress = useMemo(() => {
     if (allDone) return 100;
-    const totalSteps = nodes.length;
-    return Math.round((completedSteps / totalSteps) * 100);
-  }, [nodes.length, completedSteps, allDone]);
+    const totalTime = nodes.reduce((sum, n) => sum + n.estimatedSeconds, 0);
+    if (totalTime === 0) return 0;
+    let completedTime = 0;
+    for (const node of nodes) {
+      if (node.status === "complete") {
+        completedTime += node.estimatedSeconds;
+      } else if (node.status === "active") {
+        completedTime += node.estimatedSeconds * 0.5;
+      }
+    }
+    return Math.min(95, Math.round((completedTime / totalTime) * 100));
+  }, [nodes, allDone]);
 
   return (
     <div className="bg-[#0B0E11] border border-[#1C2230] rounded-2xl overflow-hidden">

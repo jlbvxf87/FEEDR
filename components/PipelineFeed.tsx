@@ -283,7 +283,7 @@ function generateMessages(
           emoji: "🎬",
           title: `Rendering ${variantLabel}`,
           message: "Sora is creating your visuals...",
-          highlight: "This takes about 30-60 seconds",
+          highlight: "This takes about 2-5 minutes",
           variant: variantLabel,
           isActive: true,
         });
