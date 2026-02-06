@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, Suspense, useMemo, useRef } from "rea
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseBrowser";
-import type { Preset, Batch, Clip, PresetKey, BatchMode, BatchSize, OutputType } from "@/lib/types";
+import type { Preset, Batch, Clip, PresetKey, BatchMode, BatchSize, OutputType, BatchStatus, ClipStatus } from "@/lib/types";
 import { ImagePack, IMAGE_PACKS, generateImagePrompts } from "@/lib/imagePresets";
 import { QualityMode, estimateBatchCost, formatCost, analyzeComplexity, QUALITY_TIERS } from "@/lib/costs";
 import { ImagePackSelector } from "@/components/ImagePackSelector";
@@ -269,6 +269,49 @@ function FeedPageContent() {
     await supabase.from("clips").update({ killed }).eq("id", clipId);
     setClips((prev) => prev.map((c) => (c.id === clipId ? { ...c, killed } : c)));
   }, []);
+
+  const handleCancel = useCallback(async () => {
+    if (!currentBatch) return;
+    try {
+      // 1. Set batch status to cancelled
+      await supabase
+        .from("batches")
+        .update({ status: "cancelled" as BatchStatus })
+        .eq("id", currentBatch.id);
+
+      // 2. Mark all non-ready clips as failed
+      await supabase
+        .from("clips")
+        .update({ status: "failed" as ClipStatus, error: "Cancelled by user" })
+        .eq("batch_id", currentBatch.id)
+        .neq("status", "ready");
+
+      // 3. Delete queued/running jobs
+      await supabase
+        .from("jobs")
+        .delete()
+        .eq("batch_id", currentBatch.id)
+        .in("status", ["queued", "running"]);
+
+      // 4. Refund credits
+      await supabase.rpc("refund_batch", { p_batch_id: currentBatch.id });
+
+      // 5. Update local state
+      setIsGenerating(false);
+      setCurrentBatch(prev => prev ? { ...prev, status: "cancelled" as BatchStatus } : null);
+
+      // 6. Refresh clips
+      const { data: clipsData } = await supabase
+        .from("clips")
+        .select("*")
+        .eq("batch_id", currentBatch.id)
+        .order("variant_id");
+      setClips((clipsData || []) as Clip[]);
+    } catch (err) {
+      console.error("Cancel error:", err);
+      setError("Failed to cancel batch. Try again.");
+    }
+  }, [currentBatch]);
 
   const handleClipClick = useCallback((index: number) => {
     const clip = clips[index];
@@ -633,6 +676,7 @@ function FeedPageContent() {
             <ManufacturingPanel
               clips={clips}
               batch={currentBatch}
+              onCancel={handleCancel}
             />
           </section>
         )}
@@ -719,6 +763,25 @@ function FeedPageContent() {
           <section className="text-center py-12">
             <p className="text-white font-medium mb-1">Batch failed</p>
             <p className="text-[#6B7A8F] text-sm mb-4">{currentBatch.error || "Something went wrong"}</p>
+            <button
+              onClick={() => { setCurrentBatch(null); setClips([]); }}
+              className="text-[#2EE6C9] text-sm font-medium hover:underline"
+            >
+              Create another
+            </button>
+          </section>
+        )}
+
+        {/* Batch cancelled */}
+        {!showManufacturing && currentBatch?.status === "cancelled" && (
+          <section className="text-center py-12">
+            <p className="text-white font-medium mb-1">Batch cancelled</p>
+            <p className="text-[#6B7A8F] text-sm mb-1">
+              {clips.filter(c => c.status === "ready").length > 0
+                ? `${clips.filter(c => c.status === "ready").length} variant${clips.filter(c => c.status === "ready").length > 1 ? "s" : ""} completed before cancellation.`
+                : "No variants were completed."}
+            </p>
+            <p className="text-[#6B7A8F] text-xs mb-4">Credits have been refunded.</p>
             <button
               onClick={() => { setCurrentBatch(null); setClips([]); }}
               className="text-[#2EE6C9] text-sm font-medium hover:underline"

@@ -29,6 +29,7 @@ const corsHeaders = {
 const MAX_RETRIES = 3;
 const JOB_TIMEOUT_MS = 55000; // 55 seconds max per job
 const HEARTBEAT_INTERVAL_MS = 30000; // Update heartbeat every 30 seconds for long jobs
+const MAX_VIDEO_POLL_MS = 600_000; // 10 minutes max polling for Sora video generation
 
 // Timeout wrapper for async operations
 async function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
@@ -644,6 +645,15 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
     // ═══════════════════════════════════════════════════════════════
     console.log(`[Video Poll] Checking Sora task ${existingTaskId} for clip ${job.clip_id}`);
 
+    // TIMEOUT GUARD: Prevent infinite polling if Sora never responds
+    const submittedAt = job.payload_json?.sora_submitted_at;
+    if (submittedAt && (Date.now() - submittedAt) > MAX_VIDEO_POLL_MS) {
+      throw new Error(
+        `Video generation timed out after ${Math.round(MAX_VIDEO_POLL_MS / 60000)} minutes. ` +
+        `Sora task ${existingTaskId} never completed.`
+      );
+    }
+
     if (!videoService.checkStatus) {
       throw new Error("Video service does not support checkStatus");
     }
@@ -770,8 +780,12 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
 
       console.log(`[Video Submit] Sora task submitted: ${taskId}`);
 
-      // Save task_id to job payload and re-queue for polling
-      const updatedPayload = { ...job.payload_json, sora_task_id: taskId };
+      // Save task_id and submission timestamp to job payload and re-queue for polling
+      const updatedPayload = {
+        ...job.payload_json,
+        sora_task_id: taskId,
+        sora_submitted_at: Date.now(),
+      };
 
       await supabase.rpc("complete_job", {
         p_job_id: job.id,

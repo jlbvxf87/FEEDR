@@ -68,6 +68,71 @@ function getCurrentPhase(clips: Clip[], batchStatus: string): string {
   return "research";
 }
 
+// Parse raw error strings into user-friendly messages with step context
+interface ParsedError {
+  step: string;
+  emoji: string;
+  userMessage: string;
+  guidance: string;
+}
+
+function parseClipError(rawError: string | null): ParsedError {
+  if (!rawError) {
+    return { step: "unknown", emoji: "⚠️", userMessage: "Something went wrong", guidance: "We'll retry automatically" };
+  }
+
+  const lower = rawError.toLowerCase();
+
+  // Video-specific errors
+  if (lower.includes("video generation timed out") || (lower.includes("sora task") && lower.includes("never completed"))) {
+    return { step: "video", emoji: "🎬", userMessage: "Video creation took too long", guidance: "This sometimes happens with complex scenes. Try simplifying your prompt." };
+  }
+  if ((lower.includes("sora") && lower.includes("failed")) || lower.includes("video") && lower.includes("failed")) {
+    return { step: "video", emoji: "🎬", userMessage: "AI couldn't create this video", guidance: "Try adjusting your prompt for simpler visuals." };
+  }
+  if (lower.includes("no video prompt")) {
+    return { step: "video", emoji: "🎬", userMessage: "Not enough detail for video generation", guidance: "Try a more descriptive prompt." };
+  }
+
+  // Voice errors
+  if (lower.includes("voice") || lower.includes("tts") || lower.includes("audio")) {
+    return { step: "voice", emoji: "🎙️", userMessage: "Voice generation failed", guidance: "This is usually temporary. Try again in a moment." };
+  }
+
+  // Script errors
+  if (lower.includes("script") || lower.includes("compile")) {
+    return { step: "script", emoji: "✍️", userMessage: "Script generation failed", guidance: "Try rewording your prompt." };
+  }
+
+  // Assembly errors
+  if (lower.includes("assembl") || lower.includes("merge") || lower.includes("overlay")) {
+    return { step: "assembly", emoji: "🔧", userMessage: "Final assembly failed", guidance: "This is usually a temporary issue. Try again." };
+  }
+
+  // Content policy
+  if (lower.includes("content policy") || lower.includes("safety") || lower.includes("violat")) {
+    return { step: "unknown", emoji: "🚫", userMessage: "Content flagged by safety filter", guidance: "Modify your prompt to avoid restricted content." };
+  }
+
+  // Max retries
+  if (lower.includes("max retries")) {
+    return { step: "unknown", emoji: "🔄", userMessage: "Failed after 3 attempts", guidance: "This usually means a temporary service issue. Try again later." };
+  }
+
+  // Cancelled
+  if (lower.includes("cancelled by user")) {
+    return { step: "unknown", emoji: "✋", userMessage: "Cancelled by you", guidance: "Credits have been refunded." };
+  }
+
+  // Default
+  return {
+    step: "unknown",
+    emoji: "⚠️",
+    userMessage: rawError.length > 80 ? rawError.slice(0, 80) + "..." : rawError,
+    guidance: "Try again or adjust your prompt.",
+  };
+}
+
 // Generate smart, conversational feed messages
 function generateMessages(
   clips: Clip[], 
@@ -361,17 +426,19 @@ function generateMessages(
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // ERROR HANDLING
+  // ERROR HANDLING - Enhanced with step context and guidance
   // ═══════════════════════════════════════════════════════════════
   const failedClips = clips.filter(c => c.status === "failed");
   failedClips.forEach((clip, index) => {
     const variantLabel = clip.variant_id || `V${String(index + 1).padStart(2, '0')}`;
+    const parsed = parseClipError(clip.error);
     messages.push({
       id: `msg-${msgId++}`,
       phase: "error",
-      emoji: "⚠️",
-      title: `${variantLabel} had an issue`,
-      message: clip.error || "We'll retry automatically",
+      emoji: parsed.emoji,
+      title: `${variantLabel} failed${parsed.step !== "unknown" ? ` at ${parsed.step}` : ""}`,
+      message: parsed.userMessage,
+      highlight: parsed.guidance,
       variant: variantLabel,
     });
   });

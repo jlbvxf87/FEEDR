@@ -9,6 +9,7 @@ interface ManufacturingPanelProps {
   clips: Clip[];
   batch: Batch & { estimated_cost?: number };
   recentWinners?: Clip[];
+  onCancel?: () => void;
 }
 
 interface Node {
@@ -235,7 +236,7 @@ function formatTime(seconds: number): string {
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
 
-export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
+export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPanelProps) {
   const outputType = batch.output_type || "video";
   const estimatedCost = batch.estimated_cost || 0;
   const hasResearch = !!batch.research_json;
@@ -249,6 +250,7 @@ export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
   // Elapsed time tracker
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   useEffect(() => {
     if (allDone) return;
@@ -356,6 +358,33 @@ export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
             {allDone && (
               <p className="text-xs text-[#2EE6C9] font-medium">Built from viral data ✓</p>
             )}
+            {!allDone && onCancel && (
+              <div className="mt-2">
+                {!showCancelConfirm ? (
+                  <button
+                    onClick={() => setShowCancelConfirm(true)}
+                    className="text-[10px] text-[#6B7A8F] hover:text-[#EF4444] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { onCancel(); setShowCancelConfirm(false); }}
+                      className="text-[10px] px-2 py-1 rounded bg-[#EF4444]/20 text-[#EF4444] hover:bg-[#EF4444]/30 transition-colors"
+                    >
+                      Confirm cancel
+                    </button>
+                    <button
+                      onClick={() => setShowCancelConfirm(false)}
+                      className="text-[10px] text-[#6B7A8F] hover:text-white transition-colors"
+                    >
+                      Keep going
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -388,6 +417,25 @@ export function ManufacturingPanel({ clips, batch }: ManufacturingPanelProps) {
           ))}
         </div>
       </div>
+
+      {/* Failure summary - shown when batch has failed clips */}
+      {clips.some(c => c.status === "failed") && (
+        <div className="px-5 py-3 border-t border-[#1C2230] bg-[#EF4444]/5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">⚠️</span>
+              <span className="text-xs text-[#EF4444]">
+                {readyCount} of {totalCount} completed. {clips.filter(c => c.status === "failed").length} had issues.
+              </span>
+            </div>
+            {readyCount > 0 && (
+              <span className="text-[10px] text-[#6B7A8F]">
+                Completed variants are still available
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Footer with prompt and elapsed time */}
       <div className="px-5 py-3 border-t border-[#1C2230] bg-[#0F1318] flex items-center justify-between">

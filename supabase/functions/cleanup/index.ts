@@ -71,7 +71,7 @@ serve(async (req) => {
         error: "Reset: job was stuck",
       })
       .eq("status", "running")
-      .lt("created_at", stuckThreshold)
+      .lt("updated_at", stuckThreshold)
       .select("id");
     
     if (stuckError) {
