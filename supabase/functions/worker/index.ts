@@ -484,9 +484,12 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
     if (clip.script_spoken && clip.status !== "planned") {
       console.log(`Clip ${clip.id} already has script, skipping generation`);
       generatedScripts.push(clip.script_spoken);
-      // Still ensure TTS job exists
-      await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "tts", { 
-        script: clip.script_spoken 
+      // Still ensure TTS and video jobs exist (parallel pipeline)
+      await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "tts", {
+        script: clip.script_spoken
+      });
+      await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "video", {
+        duration_seconds: 15,
       });
       continue;
     }
@@ -529,9 +532,14 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
       })
       .eq("id", clip.id);
     
-    // IDEMPOTENT: Create TTS job only if it doesn't already exist
-    await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "tts", { 
-      script: script_spoken 
+    // PARALLEL PIPELINE: Create BOTH TTS and Video jobs simultaneously
+    // Sora only needs sora_prompt (already on clip), not the voice.
+    // This lets TTS and Video run in parallel — saves 5-10s off total time.
+    await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "tts", {
+      script: script_spoken,
+    });
+    await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "video", {
+      duration_seconds: 15,
     });
   }
   
@@ -603,10 +611,22 @@ async function handleTtsJob(supabase: any, job: any, services: ReturnType<typeof
     console.log(`Clip ${job.clip_id} already has voice, skipping generation`);
   }
   
-  // IDEMPOTENT: Create video job only if it doesn't already exist
-  await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "video", { 
-    duration_seconds 
-  });
+  // PARALLEL PIPELINE: TTS is done. Check if video is also done — if so, create assemble.
+  // (Video job was already created by compile in parallel with TTS)
+  const { data: clipCheck } = await supabase
+    .from("clips")
+    .select("raw_video_url")
+    .eq("id", job.clip_id)
+    .single();
+
+  if (clipCheck?.raw_video_url) {
+    console.log(`[TTS] Video already done for clip ${job.clip_id}, creating assemble job`);
+    await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", {
+      duration_seconds,
+    });
+  } else {
+    console.log(`[TTS] Voice done, waiting for video to finish for clip ${job.clip_id}`);
+  }
 }
 
 // Handle video job - generates raw video using AI service
@@ -716,10 +736,21 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
 
       console.log(`[Video Poll] Video saved for clip ${job.clip_id}`);
 
-      // Create assemble job
-      await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", {
-        duration_seconds
-      });
+      // PARALLEL PIPELINE: Video is done. Check if TTS is also done — if so, create assemble.
+      const { data: clipAfterVideo } = await supabase
+        .from("clips")
+        .select("voice_url")
+        .eq("id", job.clip_id)
+        .single();
+
+      if (clipAfterVideo?.voice_url) {
+        console.log(`[Video Poll] Voice also ready, creating assemble job for clip ${job.clip_id}`);
+        await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", {
+          duration_seconds,
+        });
+      } else {
+        console.log(`[Video Poll] Video done, waiting for voice for clip ${job.clip_id}`);
+      }
       return; // Done! Job will be marked "done" by the outer handler
     }
 
@@ -887,9 +918,20 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
         })
         .eq("id", job.clip_id);
 
-      await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", {
-        duration_seconds
-      });
+      // PARALLEL PIPELINE: Check if voice is also done before creating assemble
+      const { data: clipAfterSync } = await supabase
+        .from("clips")
+        .select("voice_url")
+        .eq("id", job.clip_id)
+        .single();
+
+      if (clipAfterSync?.voice_url) {
+        await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", {
+          duration_seconds,
+        });
+      } else {
+        console.log(`[Video Sync] Video done, waiting for voice for clip ${job.clip_id}`);
+      }
     }
   }
 }

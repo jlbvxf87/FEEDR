@@ -169,11 +169,12 @@ function FeedPageContent() {
 
     const pollInterval = setInterval(async () => {
       try {
-        // Trigger worker to process queued jobs (compile, tts, video, assemble)
-        for (let i = 0; i < 5; i++) {
-          const { data } = await supabase.functions.invoke("worker", { body: { action: "run-once" } });
-          if (data?.processed !== true) break; // No more jobs
-        }
+        // Trigger worker to process queued jobs in parallel
+        // Fire 3 concurrent invocations so TTS + Video can run simultaneously
+        const workerCalls = Array.from({ length: 3 }, () =>
+          supabase.functions.invoke("worker", { body: { action: "run-once" } }).catch(() => ({ data: null }))
+        );
+        await Promise.all(workerCalls);
 
         const { data: batchData } = await supabase
           .from("batches")
