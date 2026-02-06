@@ -575,11 +575,16 @@ function FeedPageContent() {
                   <div className="absolute top-full left-6 border-8 border-transparent border-t-[#1C2230]" />
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[#6B7A8F]">Est.</span>
-                <span className="text-[#2EE6C9] font-bold text-lg">
-                  {formatCost(estimatedCost.totalCents)}
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-[#4B5563]">
+                  ~{outputType === "video" ? `${Math.ceil((45 + 10 + 12 + 270 + 15) / 60)}` : "2"} min
                 </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#6B7A8F]">Est.</span>
+                  <span className="text-[#2EE6C9] font-bold text-lg">
+                    {formatCost(estimatedCost.totalCents)}
+                  </span>
+                </div>
               </div>
             </div>
 

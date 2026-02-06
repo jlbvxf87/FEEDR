@@ -388,40 +388,63 @@ export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPane
     return () => clearInterval(interval);
   }, [activeNode?.id, allDone]);
 
-  // Calculate estimated remaining time (counts down using elapsed time)
+  // Track when the active step started (to measure actual step durations)
+  const [activeStepStartTime, setActiveStepStartTime] = useState<number>(Date.now());
+  useEffect(() => {
+    setActiveStepStartTime(Date.now());
+  }, [activeNode?.id]);
+  const activeStepElapsed = Math.max(0, Math.floor((Date.now() - activeStepStartTime) / 1000));
+
+  // Adaptive remaining time: only count pending + active steps, not completed ones
   const estimatedRemaining = useMemo(() => {
     if (allDone) return 0;
-    const activeIndex = nodes.findIndex((n) => n.status === "active");
-    if (activeIndex === -1) return 0;
-
-    // Total estimated time for all steps
     const parallelSteps = ["video", "research", "generate"];
-    let totalEstimated = 0;
-    for (let i = 0; i < nodes.length; i++) {
-      const multiplier = parallelSteps.includes(nodes[i].id) ? 1 : totalCount;
-      totalEstimated += nodes[i].estimatedSeconds * multiplier;
+
+    let remaining = 0;
+    for (const node of nodes) {
+      if (node.status === "complete") continue; // Done — 0 remaining
+
+      const multiplier = parallelSteps.includes(node.id) ? 1 : totalCount;
+      const stepTotal = node.estimatedSeconds * multiplier;
+
+      if (node.status === "active") {
+        // Active step: estimate minus time already spent on this step
+        remaining += Math.max(0, stepTotal - activeStepElapsed);
+      } else {
+        // Pending step: full estimate
+        remaining += stepTotal;
+      }
     }
+    return remaining;
+  }, [nodes, allDone, totalCount, activeStepElapsed]);
 
-    // Remaining = total estimate minus actual elapsed time
-    return Math.max(0, totalEstimated - elapsedSeconds);
-  }, [nodes, allDone, totalCount, elapsedSeconds]);
-
-  // Detect if we've exceeded the estimate (Sora taking longer than usual)
+  // Detect if we've exceeded the active step's estimate
   const isOvertime = estimatedRemaining === 0 && !allDone;
 
-  // Progress percentage based on elapsed vs total estimated time
+  // Adaptive progress: completed steps = 100%, active step = proportional, pending = 0%
   const progress = useMemo(() => {
     if (allDone) return 100;
     const parallelSteps = ["video", "research", "generate"];
+
     let totalEstimated = 0;
+    let completedTime = 0;
+
     for (const node of nodes) {
       const multiplier = parallelSteps.includes(node.id) ? 1 : totalCount;
-      totalEstimated += node.estimatedSeconds * multiplier;
+      const stepTotal = node.estimatedSeconds * multiplier;
+      totalEstimated += stepTotal;
+
+      if (node.status === "complete") {
+        completedTime += stepTotal; // Full credit for done steps
+      } else if (node.status === "active") {
+        // Proportional credit for active step (capped at step estimate)
+        completedTime += Math.min(activeStepElapsed, stepTotal);
+      }
     }
     if (totalEstimated === 0) return 0;
-    // Cap at 95% until actually done — never show 100% while still processing
-    return Math.min(95, Math.round((elapsedSeconds / totalEstimated) * 100));
-  }, [nodes, allDone, elapsedSeconds, totalCount]);
+    // Cap at 95% until actually done
+    return Math.min(95, Math.round((completedTime / totalEstimated) * 100));
+  }, [nodes, allDone, totalCount, activeStepElapsed]);
 
   return (
     <div className="bg-[#0B0E11] border border-[#1C2230] rounded-2xl overflow-hidden">
