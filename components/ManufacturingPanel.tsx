@@ -237,6 +237,95 @@ function formatTime(seconds: number): string {
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
 
+// Live preview of content created so far — keeps users engaged during Sora wait
+function ContentPreview({ clips, activeStepId, elapsedSeconds, batchCreatedAt }: {
+  clips: Clip[];
+  activeStepId?: string;
+  elapsedSeconds: number;
+  batchCreatedAt: string;
+}) {
+  const [expandedClip, setExpandedClip] = useState(0);
+  const clip = clips[expandedClip] || clips[0];
+
+  // Calculate how long the video step has been running
+  const videoStepElapsed = useMemo(() => {
+    if (activeStepId !== "video") return 0;
+    // Approximate: total elapsed minus earlier steps (~67s for research+script+voice)
+    return Math.max(0, elapsedSeconds - 67);
+  }, [activeStepId, elapsedSeconds]);
+
+  const hasScript = !!clip?.script_spoken;
+  const hasVoice = !!clip?.voice_url;
+  const hasSoraPrompt = !!clip?.sora_prompt;
+  const isVideoStep = activeStepId === "video";
+
+  return (
+    <div className="px-5 py-4 border-t border-[#1C2230] space-y-3">
+      {/* Clip selector tabs */}
+      {clips.length > 1 && (
+        <div className="flex gap-2 mb-2">
+          {clips.map((c, i) => (
+            <button
+              key={c.id}
+              onClick={() => setExpandedClip(i)}
+              className={cn(
+                "text-[10px] px-2.5 py-1 rounded-full border transition-all",
+                expandedClip === i
+                  ? "border-[#0095FF] bg-[#0095FF]/10 text-[#0095FF]"
+                  : "border-[#2A3241] text-[#4B5563] hover:text-[#6B7A8F]"
+              )}
+            >
+              {c.variant_id}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Script preview */}
+      {hasScript && (
+        <div className="space-y-1">
+          <p className="text-[10px] font-medium text-[#2EE6C9] uppercase tracking-wider">Script</p>
+          <p className="text-xs text-[#9CA3AF] leading-relaxed">
+            &ldquo;{clip.script_spoken}&rdquo;
+          </p>
+        </div>
+      )}
+
+      {/* Voice preview */}
+      {hasVoice && (
+        <div className="space-y-1">
+          <p className="text-[10px] font-medium text-[#2EE6C9] uppercase tracking-wider">Voiceover</p>
+          <audio
+            src={clip.voice_url!}
+            controls
+            className="w-full h-8 opacity-80"
+            style={{ filter: "invert(1) hue-rotate(180deg)", maxHeight: "32px" }}
+          />
+        </div>
+      )}
+
+      {/* Sora prompt + video step timer */}
+      {hasSoraPrompt && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-medium text-[#0095FF] uppercase tracking-wider">
+              Sora Prompt
+            </p>
+            {isVideoStep && videoStepElapsed > 0 && (
+              <span className="text-[10px] text-[#4B5563]">
+                Rendering: {formatTime(videoStepElapsed)} / ~4-5m
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-[#6B7A8F] leading-relaxed italic">
+            {clip.sora_prompt}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPanelProps) {
   const outputType = batch.output_type || "video";
   const estimatedCost = batch.estimated_cost || 0;
@@ -427,6 +516,11 @@ export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPane
           ))}
         </div>
       </div>
+
+      {/* Live content preview — shows what's been created so far */}
+      {!allDone && clips.length > 0 && clips[0].script_spoken && (
+        <ContentPreview clips={clips} activeStepId={activeNode?.id} elapsedSeconds={elapsedSeconds} batchCreatedAt={batch.created_at} />
+      )}
 
       {/* Failure summary - shown when batch has failed clips */}
       {clips.some(c => c.status === "failed") && (
