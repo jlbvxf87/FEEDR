@@ -161,6 +161,20 @@ serve(async (req) => {
     const serviceConfig = services.getServiceConfig();
     console.log("Worker using services:", serviceConfig);
 
+    // STUCK JOB RECOVERY: Reset jobs stuck in "running" for 2+ minutes back to "queued"
+    // This prevents zombie jobs from blocking the pipeline after worker crashes
+    const twoMinutesAgo = new Date(Date.now() - 120_000).toISOString();
+    const { data: stuckJobs } = await supabase
+      .from("jobs")
+      .update({ status: "queued", updated_at: new Date().toISOString() })
+      .eq("status", "running")
+      .lt("updated_at", twoMinutesAgo)
+      .select("id, type");
+
+    if (stuckJobs && stuckJobs.length > 0) {
+      console.log(`[Recovery] Reset ${stuckJobs.length} stuck jobs: ${stuckJobs.map(j => `${j.id}(${j.type})`).join(", ")}`);
+    }
+
     // ATOMIC JOB CLAIM: Use RPC to claim job with FOR UPDATE SKIP LOCKED
     // This prevents race conditions when multiple workers run concurrently
     const { data: claimedJobs, error: claimError } = await supabase.rpc("claim_next_job");
