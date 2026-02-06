@@ -161,6 +161,33 @@ serve(async (req) => {
     const serviceConfig = services.getServiceConfig();
     console.log("Worker using services:", serviceConfig);
 
+    // Recovery: reset stuck "running" jobs so they can be retried
+    const resetCount = await safeRpc(
+      supabase,
+      "reset_stuck_jobs",
+      { p_threshold_minutes: 2 },
+      async () => {
+        const thresholdIso = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        const { data, error } = await supabase
+          .from("jobs")
+          .update({
+            status: "queued",
+            error: "Reset: job exceeded 2 minute threshold",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("status", "running")
+          .lt("updated_at", thresholdIso);
+        if (error) {
+          console.warn("[Recovery] Failed to reset stuck jobs:", error.message);
+        }
+        return Array.isArray(data) ? data.length : 0;
+      }
+    );
+
+    if (resetCount && resetCount > 0) {
+      console.log(`[Recovery] Reset ${resetCount} stuck jobs to queued`);
+    }
+
     // ATOMIC JOB CLAIM: Use RPC to claim job with FOR UPDATE SKIP LOCKED
     // This prevents race conditions when multiple workers run concurrently
     const { data: claimedJobs, error: claimError } = await supabase.rpc("claim_next_job");
