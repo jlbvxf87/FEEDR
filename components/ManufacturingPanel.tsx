@@ -86,41 +86,55 @@ function getNodes(clips: Clip[], outputType: string, batchStatus: string, hasRes
   ];
 }
 
-// Smart, conversational status messages for each step
+// Engaging status messages — keeps users entertained during each step
 const STATUS_MESSAGES: Record<string, string[]> = {
   research: [
-    "Finding what's working right now...",
-    "Analyzing viral patterns in your niche...",
-    "Extracting winning formulas...",
-    "Learning from proven content...",
+    "Scanning TikTok for what's popping...",
+    "Finding hooks that stopped the scroll...",
+    "Analyzing 1000s of viral patterns...",
+    "Extracting the winning formulas...",
+    "Learning what makes people watch...",
+    "Decoding the algorithm's favorites...",
   ],
   script: [
-    "Writing hooks based on viral patterns...",
+    "Writing hooks that stop the scroll...",
     "Crafting your unique variations...",
-    "Making each script different but proven...",
+    "Mixing proven patterns with fresh angles...",
+    "Sharpening every word for impact...",
+    "Making each script different but lethal...",
   ],
   voice: [
     "Recording natural voiceover...",
-    "Making it sound authentic...",
-    "Adding the right energy...",
+    "Dialing in the perfect tone...",
+    "Making it sound like a real creator...",
+    "Adding the right energy and pacing...",
   ],
   video: [
-    "Sora is generating your video (3-5 min)...",
-    "AI is rendering your visuals...",
-    "This is where magic happens...",
-    "Still rendering — Sora needs time for quality...",
+    "Sora is building your world (3-5 min)...",
+    "Rendering each frame with AI precision...",
+    "Piecing together cinematic visuals...",
+    "Teaching pixels to tell your story...",
+    "Generating scenes frame by frame...",
+    "Sora is cooking... almost there...",
+    "Still rendering — quality takes a moment...",
+    "Wrangling AI neurons into art...",
+    "Painting with light and motion...",
+    "Your video is taking shape...",
   ],
   merge: [
-    "Putting it all together...",
-    "Final assembly in progress...",
+    "Syncing voice to visuals...",
+    "Layering on screen text...",
+    "Final assembly — stitching it together...",
+    "Adding the finishing touches...",
     "Almost ready for you...",
   ],
   prompt: [
-    "Crafting perfect prompts...",
-    "Optimizing for quality...",
+    "Crafting the perfect image prompts...",
+    "Optimizing for visual impact...",
   ],
   generate: [
     "Generating your images...",
+    "Bringing your visuals to life...",
     "Creating variations...",
   ],
 };
@@ -355,18 +369,21 @@ export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPane
     return () => clearInterval(interval);
   }, [batch.created_at, allDone]);
 
-  // Rotate status messages for active step
+  // Rotate status messages for active step — faster for long steps
   useEffect(() => {
     if (!activeNode || allDone) return;
-    
+
     const messages = STATUS_MESSAGES[activeNode.id] || ["Processing..."];
     let index = 0;
     setStatusMessage(messages[0]);
-    
+
+    // Video step rotates every 8s (long wait, pace it out), others every 3s
+    const intervalMs = activeNode.id === "video" ? 8000 : 3000;
+
     const interval = setInterval(() => {
       index = (index + 1) % messages.length;
       setStatusMessage(messages[index]);
-    }, 3000);
+    }, intervalMs);
 
     return () => clearInterval(interval);
   }, [activeNode?.id, allDone]);
