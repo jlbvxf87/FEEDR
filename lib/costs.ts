@@ -106,10 +106,10 @@ export function estimateVideoCost(
 ): { total: number; baseCost: number; breakdown: Record<string, number> } {
   const tier = QUALITY_TIERS[mode];
   
-  // Script cost (assuming ~500 input tokens, ~200 output tokens)
+  // Script cost (realistic: ~3000 input tokens with system prompt + research, ~800 output)
   const scriptCosts = MODEL_COSTS.script[tier.scriptModel as keyof typeof MODEL_COSTS.script];
-  const scriptCost = scriptCosts 
-    ? ((500 * scriptCosts.input + 200 * scriptCosts.output) / 1000000) * 100
+  const scriptCost = scriptCosts
+    ? (3000 * scriptCosts.input + 800 * scriptCosts.output) / 1000000
     : 1;
   
   // Voice cost
@@ -152,10 +152,10 @@ export function estimateImageCost(
 ): { total: number; baseCost: number; breakdown: Record<string, number> } {
   const tier = QUALITY_TIERS[mode];
   
-  // Script cost for prompts
+  // Script cost for prompts (realistic: ~1500 input tokens, ~300 output per image prompt)
   const scriptCosts = MODEL_COSTS.script[tier.scriptModel as keyof typeof MODEL_COSTS.script];
-  const scriptCost = scriptCosts 
-    ? ((300 * scriptCosts.input + 100 * scriptCosts.output) / 1000000) * 100 * count
+  const scriptCost = scriptCosts
+    ? ((1500 * scriptCosts.input + 300 * scriptCosts.output) / 1000000) * count
     : 0.5 * count;
   
   // Image generation cost
