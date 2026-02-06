@@ -30,7 +30,8 @@ const corsHeaders = {
 const MAX_RETRIES = 3;
 const JOB_TIMEOUT_MS = 55000; // 55 seconds max per job
 const HEARTBEAT_INTERVAL_MS = 30000; // Update heartbeat every 30 seconds for long jobs
-const MAX_VIDEO_POLL_MS = 600_000; // 10 minutes max polling for Sora video generation
+const MAX_VIDEO_POLL_MS = 420_000; // 7 minutes max polling for Sora video generation
+const MAX_SORA_PROMPT_CHARS = 800; // Cap prompt length to prevent KIE.AI issues
 
 // Timeout wrapper for async operations
 async function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
@@ -578,13 +579,15 @@ async function handleTtsJob(supabase: any, job: any, services: ReturnType<typeof
   // IDEMPOTENCY: Skip if voice already generated (from previous partial run)
   let voice_url = clip.voice_url;
   let duration_seconds = 15; // Default duration
-  
+
   if (!voice_url) {
-    // Update clip status to vo
+    // Update clip status to vo — ONLY if not already past this state
+    // (parallel video job may have already set "rendering")
     await supabase
       .from("clips")
       .update({ status: "vo" })
-      .eq("id", job.clip_id);
+      .eq("id", job.clip_id)
+      .in("status", ["planned", "scripting"]);
     
     // Generate voice using AI service
     const result = await withTimeout(
@@ -637,7 +640,7 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
   // Get clip details including script for quality check
   const { data: clip, error: clipError } = await supabase
     .from("clips")
-    .select("sora_prompt, raw_video_url, script_spoken, preset_key, sora_task_id")
+    .select("sora_prompt, raw_video_url, script_spoken, preset_key, sora_task_id, created_at, updated_at")
     .eq("id", job.clip_id)
     .single();
 
@@ -669,8 +672,13 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
     console.log(`[Video Poll] Checking Sora task ${existingTaskId} for clip ${job.clip_id}`);
 
     // TIMEOUT GUARD: Prevent infinite polling if Sora never responds
+    // Check job payload first, fall back to clip's created_at as safety net
     const submittedAt = job.payload_json?.sora_submitted_at;
-    if (submittedAt && (Date.now() - submittedAt) > MAX_VIDEO_POLL_MS) {
+    const elapsedMs = submittedAt
+      ? Date.now() - submittedAt
+      : Date.now() - new Date(clip.updated_at || clip.created_at || Date.now()).getTime();
+
+    if (elapsedMs > MAX_VIDEO_POLL_MS) {
       throw new Error(
         `Video generation timed out after ${Math.round(MAX_VIDEO_POLL_MS / 60000)} minutes. ` +
         `Sora task ${existingTaskId} never completed.`
@@ -761,17 +769,19 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
     // Still processing or pending — re-queue job to poll again next cycle
     console.log(`[Video Poll] Task still ${statusResult.status}, re-queuing for next poll...`);
 
+    // CRITICAL: Preserve payload (contains sora_task_id and sora_submitted_at for timeout guard)
     await supabase.rpc("complete_job", {
       p_job_id: job.id,
       p_status: "queued",
       p_error: null,
-      p_payload: null,
+      p_payload: job.payload_json,
       p_reset_attempts: true,
     }).catch(() => {
       return supabase
         .from("jobs")
         .update({
           status: "queued",
+          payload_json: job.payload_json,
           attempts: 0,
           updated_at: new Date().toISOString()
         })
@@ -817,11 +827,24 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
       console.error(`[Video] Prompt quality critically low (${soraValidation.score}/100). Issues: ${soraValidation.issues.join(", ")}`);
     }
 
-    // Update clip status to rendering
+    // CAP PROMPT LENGTH: KIE.AI can struggle with very long prompts
+    if (finalPrompt.length > MAX_SORA_PROMPT_CHARS) {
+      console.warn(`[Video] Prompt too long (${finalPrompt.length} chars), truncating to ${MAX_SORA_PROMPT_CHARS}`);
+      // Truncate at the last sentence boundary before the limit
+      const truncated = finalPrompt.substring(0, MAX_SORA_PROMPT_CHARS);
+      const lastPeriod = truncated.lastIndexOf(".");
+      finalPrompt = lastPeriod > MAX_SORA_PROMPT_CHARS * 0.6
+        ? truncated.substring(0, lastPeriod + 1)
+        : truncated;
+    }
+
+    // Update clip status to rendering — ONLY if not already past this state
+    // (prevents overwriting "assembling" or "ready" from a retry)
     await supabase
       .from("clips")
       .update({ status: "rendering" })
-      .eq("id", job.clip_id);
+      .eq("id", job.clip_id)
+      .in("status", ["planned", "scripting", "vo"]);
 
     // Check if the service supports async submit
     if (videoService.submitVideo) {

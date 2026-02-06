@@ -307,8 +307,10 @@ function generateMessages(
   if (voClips.length > 0 || hasVoice) {
     clips.forEach((clip, index) => {
       const variantLabel = clip.variant_id || `V${String(index + 1).padStart(2, '0')}`;
-      
-      if (clip.status === "vo") {
+
+      // Show "recording" only if status is "vo" AND no voice_url yet
+      // (with parallel pipeline, status may still be "vo" after voice is done)
+      if (clip.status === "vo" && !clip.voice_url) {
         messages.push({
           id: `msg-${msgId++}`,
           phase: "voice",
@@ -318,7 +320,7 @@ function generateMessages(
           variant: variantLabel,
           isActive: true,
         });
-      } else if (clip.voice_url && !clips.some(c => c.status === "vo")) {
+      } else if (clip.voice_url) {
         messages.push({
           id: `msg-${msgId++}`,
           phase: "voice",
@@ -341,14 +343,24 @@ function generateMessages(
     clips.forEach((clip, index) => {
       const variantLabel = clip.variant_id || `V${String(index + 1).padStart(2, '0')}`;
 
-      if (clip.status === "rendering") {
+      // Show "done" when raw_video_url is present, regardless of status
+      if (clip.raw_video_url) {
+        messages.push({
+          id: `msg-${msgId++}`,
+          phase: "video",
+          emoji: "🎥",
+          title: `${variantLabel} video rendered`,
+          message: "Visual content created successfully",
+          variant: variantLabel,
+        });
+      } else if (clip.status === "rendering") {
         messages.push({
           id: `msg-${msgId++}`,
           phase: "video",
           emoji: "🎬",
           title: `Rendering ${variantLabel}`,
           message: "Sora is creating your visuals...",
-          highlight: "This takes about 2-5 minutes",
+          highlight: "This takes about 3-5 minutes",
           variant: variantLabel,
           isActive: true,
         });
@@ -362,15 +374,6 @@ function generateMessages(
           highlight: "This takes about 10-20 seconds",
           variant: variantLabel,
           isActive: true,
-        });
-      } else if (clip.raw_video_url && !clips.some(c => c.status === "rendering")) {
-        messages.push({
-          id: `msg-${msgId++}`,
-          phase: "video",
-          emoji: "🎥",
-          title: `${variantLabel} video rendered`,
-          message: "Visual content created successfully",
-          variant: variantLabel,
         });
       }
     });

@@ -53,9 +53,14 @@ function getNodes(clips: Clip[], outputType: string, batchStatus: string, hasRes
   const isResearching = batchStatus === "researching";
   const researchComplete = hasResearch || batchStatus === "running" || statusCounts.scripting > 0 || readyCount > 0;
   
+  // Use data presence for accurate parallel pipeline tracking
+  // (clip.status can be misleading when TTS and Video run in parallel)
+  const hasVoiceData = clips.some(c => c.voice_url);
+  const hasVideoData = clips.some(c => c.raw_video_url);
+
   const hasScripting = statusCounts.scripting > 0 || statusCounts.vo > 0 || statusCounts.rendering > 0 || statusCounts.generating > 0 || statusCounts.assembling > 0 || readyCount > 0;
-  const hasVo = statusCounts.vo > 0 || statusCounts.rendering > 0 || statusCounts.assembling > 0 || readyCount > 0;
-  const hasRendering = statusCounts.rendering > 0 || statusCounts.generating > 0 || statusCounts.assembling > 0 || readyCount > 0;
+  const hasVo = statusCounts.vo > 0 || hasVoiceData || statusCounts.rendering > 0 || statusCounts.assembling > 0 || readyCount > 0;
+  const hasRendering = statusCounts.rendering > 0 || hasVideoData || statusCounts.generating > 0 || statusCounts.assembling > 0 || readyCount > 0;
   const hasAssembling = statusCounts.assembling > 0 || readyCount > 0;
   const allReady = readyCount === total && total > 0;
 
@@ -79,8 +84,8 @@ function getNodes(clips: Clip[], outputType: string, batchStatus: string, hasRes
     { id: "input", label: "Input", icon: "📝", status: "complete", estimatedSeconds: STEP_TIMES.input },
     { id: "research", label: "Research", icon: "🔍", status: getStatus(researchComplete, isResearching), estimatedSeconds: STEP_TIMES.research },
     { id: "script", label: "Script", icon: "✍️", status: getStatus(hasVo, researchComplete && statusCounts.scripting > 0), estimatedSeconds: STEP_TIMES.script },
-    { id: "voice", label: "Voice", icon: "🎙️", status: getStatus(hasRendering, statusCounts.vo > 0), estimatedSeconds: STEP_TIMES.voice },
-    { id: "video", label: "Video", icon: "🎬", status: getStatus(hasAssembling, statusCounts.rendering > 0), estimatedSeconds: STEP_TIMES.video },
+    { id: "voice", label: "Voice", icon: "🎙️", status: getStatus(hasRendering || hasVoiceData, statusCounts.vo > 0 && !hasVoiceData), estimatedSeconds: STEP_TIMES.voice },
+    { id: "video", label: "Video", icon: "🎬", status: getStatus(hasAssembling, hasRendering && !hasAssembling), estimatedSeconds: STEP_TIMES.video },
     { id: "merge", label: "Merge", icon: "🔗", status: getStatus(allReady, statusCounts.assembling > 0), estimatedSeconds: STEP_TIMES.merge },
     { id: "output", label: "Output", icon: "✨", status: getStatus(allReady, false), estimatedSeconds: STEP_TIMES.output },
   ];
