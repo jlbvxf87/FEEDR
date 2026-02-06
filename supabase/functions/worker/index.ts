@@ -616,7 +616,7 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
   // Get clip details including script for quality check
   const { data: clip, error: clipError } = await supabase
     .from("clips")
-    .select("sora_prompt, raw_video_url, script_spoken, preset_key")
+    .select("sora_prompt, raw_video_url, script_spoken, preset_key, sora_task_id")
     .eq("id", job.clip_id)
     .single();
 
@@ -637,7 +637,9 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
   }
 
   // Check if we already have a task_id from a previous submit (Phase 2: Poll)
-  const existingTaskId = job.payload_json?.sora_task_id;
+  // Check both job payload AND clip record (clip record is durable fallback
+  // in case job payload was lost on crash — prevents duplicate Sora charges)
+  const existingTaskId = job.payload_json?.sora_task_id || clip.sora_task_id;
 
   if (existingTaskId) {
     // ═══════════════════════════════════════════════════════════════
@@ -779,6 +781,13 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
       });
 
       console.log(`[Video Submit] Sora task submitted: ${taskId}`);
+
+      // CRITICAL: Save task_id to clip record FIRST (durable, survives job crashes)
+      // This prevents duplicate Sora submissions ($0.50 each) if job payload is lost
+      await supabase
+        .from("clips")
+        .update({ sora_task_id: taskId })
+        .eq("id", job.clip_id);
 
       // Save task_id and submission timestamp to job payload and re-queue for polling
       const updatedPayload = {
@@ -1289,7 +1298,9 @@ RECOMMENDED HOOKS TO TEST:
 ${analysis.recommended_hooks.slice(0, 3).map((h, i) => `${i + 1}. "${h.hook}" - ${h.reasoning}`).join("\n")}`;
 }
 
-// Check if all clips in batch are done
+// Check if all clips in batch are done (ready or failed)
+// Supports partial completion: batch is "done" even if some clips failed,
+// and only the failed clips' proportional cost is refunded.
 async function checkBatchCompletion(supabase: any, batchId: string) {
   const { data: clips, error } = await supabase
     .from("clips")
@@ -1301,28 +1312,52 @@ async function checkBatchCompletion(supabase: any, batchId: string) {
     return;
   }
 
-  const allReady = clips.every((c: any) => c.status === "ready");
-  const anyFailed = clips.some((c: any) => c.status === "failed");
+  const totalCount = clips.length;
+  const readyCount = clips.filter((c: any) => c.status === "ready").length;
+  const failedCount = clips.filter((c: any) => c.status === "failed").length;
+  const allProcessed = (readyCount + failedCount) === totalCount;
 
-  if (allReady || anyFailed) {
-    const newStatus = anyFailed ? "failed" : "done";
-    
-    await supabase
-      .from("batches")
-      .update({ 
-        status: newStatus,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", batchId);
-    
-    // If batch failed, refund user credits
-    if (anyFailed) {
-      try {
+  // Only act when ALL clips are in a terminal state (ready or failed)
+  if (!allProcessed || totalCount === 0) return;
+
+  const allFailed = failedCount === totalCount;
+  const anyFailed = failedCount > 0;
+
+  // Batch is "done" if ANY clips succeeded, "failed" only if ALL failed
+  const newStatus = allFailed ? "failed" : "done";
+
+  await supabase
+    .from("batches")
+    .update({
+      status: newStatus,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", batchId);
+
+  console.log(`Batch ${batchId}: ${readyCount}/${totalCount} ready, ${failedCount} failed → ${newStatus}`);
+
+  // Handle refunds
+  if (anyFailed) {
+    try {
+      if (allFailed) {
+        // All clips failed → full refund
         await supabase.rpc("refund_batch", { p_batch_id: batchId });
-        console.log(`Refunded credits for failed batch ${batchId}`);
-      } catch (refundError) {
-        console.error(`Failed to refund batch ${batchId}:`, refundError);
+        console.log(`Full refund for batch ${batchId} (all clips failed)`);
+      } else {
+        // Partial failure → proportional refund for failed clips only
+        await supabase.rpc("partial_refund_batch", {
+          p_batch_id: batchId,
+          p_failed_count: failedCount,
+          p_total_count: totalCount,
+        }).catch(() => {
+          // Fallback to full refund if partial_refund_batch not deployed yet
+          console.warn(`partial_refund_batch RPC not available, using full refund`);
+          return supabase.rpc("refund_batch", { p_batch_id: batchId });
+        });
+        console.log(`Partial refund for batch ${batchId}: ${failedCount}/${totalCount} clips failed`);
       }
+    } catch (refundError) {
+      console.error(`Failed to refund batch ${batchId}:`, refundError);
     }
   }
 }

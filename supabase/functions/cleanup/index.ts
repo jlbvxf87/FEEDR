@@ -146,9 +146,19 @@ serve(async (req) => {
         .delete()
         .in("batch_id", staleBatchIds)
         .neq("status", "done");
-      
+
+      // Refund credits for timed-out batches (users shouldn't lose money for stuck jobs)
+      for (const batchId of staleBatchIds) {
+        try {
+          await supabase.rpc("refund_batch", { p_batch_id: batchId });
+          console.log(`Refunded credits for timed-out batch ${batchId}`);
+        } catch (refundErr) {
+          errors.push(`Failed to refund batch ${batchId}: ${refundErr}`);
+        }
+      }
+
       batchesCleaned += staleBatches.length;
-      console.log(`Marked ${staleBatches.length} stale batches as failed`);
+      console.log(`Marked ${staleBatches.length} stale batches as failed + refunded`);
     }
 
     // ============================================
