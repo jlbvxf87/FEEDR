@@ -56,6 +56,7 @@ function FeedPageContent() {
   // Cost tracking
   const [totalSpent, setTotalSpent] = useState(0);
   const [sessionCost, setSessionCost] = useState(0);
+  const [balanceCents, setBalanceCents] = useState<number | null>(null);
 
   const supabase = createClient();
 
@@ -124,6 +125,16 @@ function FeedPageContent() {
           setTotalSpent(total);
         }
 
+        // Load credit balance
+        const { data: creditsData } = await supabase
+          .from("user_credits")
+          .select("balance_cents")
+          .single();
+
+        if (creditsData) {
+          setBalanceCents(creditsData.balance_cents);
+        }
+
         // Load latest batch
         const { data: batchData } = await supabase
           .from("batches")
@@ -183,6 +194,14 @@ function FeedPageContent() {
 
         if (batch.status === "done" || batch.status === "failed") {
           setIsGenerating(false);
+          // Refresh balance to reflect any refunds for failed clips
+          const { data: creditsData } = await supabase
+            .from("user_credits")
+            .select("balance_cents")
+            .single();
+          if (creditsData) {
+            setBalanceCents(creditsData.balance_cents);
+          }
         }
       } catch (err) {
         console.error("Polling error:", err);
@@ -224,14 +243,15 @@ function FeedPageContent() {
         const detailed = extractFunctionError(error);
         // Check for insufficient credits error
         if (detailed?.includes("Insufficient credits") || error.message?.includes("Insufficient credits")) {
-          throw new Error("Not enough credits. Please add more credits to continue.");
+          throw new Error("Not enough credits. Add more to continue — you're only charged for successful outputs.");
         }
         throw new Error(detailed || error.message || "Edge function failed");
       }
 
-      // Update session cost (user was charged)
+      // Update session cost and balance (user was charged)
       setSessionCost(prev => prev + estimatedCost.totalCents);
       setTotalSpent(prev => prev + estimatedCost.totalCents);
+      setBalanceCents(prev => prev !== null ? Math.max(0, prev - estimatedCost.totalCents) : null);
 
       const { data: batchData } = await supabase
         .from("batches")
@@ -296,11 +316,20 @@ function FeedPageContent() {
       // 4. Refund credits
       await supabase.rpc("refund_batch", { p_batch_id: currentBatch.id });
 
-      // 5. Update local state
+      // 5. Refresh balance (refund applied)
+      const { data: creditsData } = await supabase
+        .from("user_credits")
+        .select("balance_cents")
+        .single();
+      if (creditsData) {
+        setBalanceCents(creditsData.balance_cents);
+      }
+
+      // 6. Update local state
       setIsGenerating(false);
       setCurrentBatch(prev => prev ? { ...prev, status: "cancelled" as BatchStatus } : null);
 
-      // 6. Refresh clips
+      // 7. Refresh clips
       const { data: clipsData } = await supabase
         .from("clips")
         .select("*")
@@ -496,7 +525,7 @@ function FeedPageContent() {
             {/* Row 3: Cost estimate with info tooltip */}
             <div className="flex items-center justify-between pt-2 border-t border-[#1C2230]">
               <div className="relative">
-                <button 
+                <button
                   className="flex items-center gap-1.5 text-xs text-[#6B7A8F] hover:text-white transition-colors group"
                   onClick={(e) => {
                     const tooltip = e.currentTarget.nextElementSibling;
@@ -532,7 +561,7 @@ function FeedPageContent() {
                     <div className="flex justify-between">
                       <span className="text-[#6B7A8F]">{outputType === "video" ? "Video" : "Image"}</span>
                       <span className="text-white font-medium">
-                        {outputType === "video" 
+                        {outputType === "video"
                           ? "Sora"
                           : (qualityMode === "fast" ? "DALL-E 2" : qualityMode === "good" ? "DALL-E 3" : "DALL-E 3 HD")
                         }
@@ -553,6 +582,11 @@ function FeedPageContent() {
                 </span>
               </div>
             </div>
+
+            {/* No charge for failures assurance */}
+            <p className="text-[10px] text-[#4B5563] text-center pt-1">
+              You&apos;re never charged for failed generations. Credits are automatically refunded.
+            </p>
           </div>
 
           {/* Style Enhancement Section - Always Visible */}
@@ -762,12 +796,13 @@ function FeedPageContent() {
         {!showManufacturing && currentBatch?.status === "failed" && (
           <section className="text-center py-12">
             <p className="text-white font-medium mb-1">Batch failed</p>
-            <p className="text-[#6B7A8F] text-sm mb-4">{currentBatch.error || "Something went wrong"}</p>
+            <p className="text-[#6B7A8F] text-sm mb-1">{currentBatch.error || "Something went wrong"}</p>
+            <p className="text-[#2EE6C9] text-xs mb-4">No credits were deducted — you&apos;re never charged for failed generations.</p>
             <button
               onClick={() => { setCurrentBatch(null); setClips([]); }}
               className="text-[#2EE6C9] text-sm font-medium hover:underline"
             >
-              Create another
+              Try again
             </button>
           </section>
         )}
@@ -781,7 +816,7 @@ function FeedPageContent() {
                 ? `${clips.filter(c => c.status === "ready").length} variant${clips.filter(c => c.status === "ready").length > 1 ? "s" : ""} completed before cancellation.`
                 : "No variants were completed."}
             </p>
-            <p className="text-[#6B7A8F] text-xs mb-4">Credits have been refunded.</p>
+            <p className="text-[#2EE6C9] text-xs mb-4">Credits refunded — you&apos;re only charged for successful outputs.</p>
             <button
               onClick={() => { setCurrentBatch(null); setClips([]); }}
               className="text-[#2EE6C9] text-sm font-medium hover:underline"
@@ -812,13 +847,18 @@ function FeedPageContent() {
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div>
+              <p className="text-[10px] text-[#4B5563] uppercase tracking-wider">Balance</p>
+              <p className="text-sm font-bold text-[#2EE6C9]">{balanceCents !== null ? formatCost(balanceCents) : "--"}</p>
+            </div>
+            <div className="w-px h-8 bg-[#1C2230]" />
+            <div>
               <p className="text-[10px] text-[#4B5563] uppercase tracking-wider">Session</p>
               <p className="text-sm font-semibold text-white">{formatCost(sessionCost)}</p>
             </div>
             <div className="w-px h-8 bg-[#1C2230]" />
             <div>
-              <p className="text-[10px] text-[#4B5563] uppercase tracking-wider">Total</p>
-              <p className="text-sm font-semibold text-[#2EE6C9]">{formatCost(totalSpent)}</p>
+              <p className="text-[10px] text-[#4B5563] uppercase tracking-wider">Total Spent</p>
+              <p className="text-sm font-semibold text-[#6B7A8F]">{formatCost(totalSpent)}</p>
             </div>
           </div>
           {intentText.trim() && !isGenerating && !isRunning && (
