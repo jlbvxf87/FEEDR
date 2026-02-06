@@ -1,22 +1,23 @@
 // FEEDR - Sora Video Service (KIE.AI)
-// Uses KIE.AI for Sora 2 Pro video generation
-// Docs: https://kie.ai/sora-2-pro
+// Uses KIE.AI unified jobs API for Sora 2 Pro video generation
+// Docs: https://docs.kie.ai/market/sora2/sora-2-pro-text-to-video
 
 import { VideoService, VideoOutput, VideoGenerationParams, VIDEO_STYLE_PROMPTS } from "./interface.ts";
 import { uploadVideo } from "../../storage.ts";
 
-const KIE_API_BASE = "https://api.kie.ai/v1";
+// Unified jobs API base — matches docs and watermark remover
+const KIE_API_BASE = "https://api.kie.ai/api/v1";
 
 export class SoraVideoService implements VideoService {
   readonly name = "sora";
   readonly maxDuration = 15; // Sora 2 Pro supports up to 15 seconds
   readonly supportedAspectRatios = ["9:16", "16:9"];
-  
+
   private apiKey: string;
 
   constructor() {
     this.apiKey = Deno.env.get("KIE_API_KEY") || Deno.env.get("KEIAPI_API_KEY") || "";
-    
+
     if (!this.apiKey) {
       console.warn("KIE_API_KEY not set, Sora service will fail");
     }
@@ -24,7 +25,7 @@ export class SoraVideoService implements VideoService {
 
   /**
    * Submit a video generation task — returns task_id immediately, no polling.
-   * Used by the async submit+poll pattern in the worker.
+   * Uses the unified jobs API: POST /api/v1/jobs/createTask
    */
   async submitVideo(params: VideoGenerationParams): Promise<string> {
     const { prompt, duration = 15, aspect_ratio = "9:16" } = params;
@@ -34,18 +35,21 @@ export class SoraVideoService implements VideoService {
 
     console.log(`[Sora Submit] Submitting to KIE.AI: ${prompt.substring(0, 50)}...`);
 
-    const submitResponse = await fetch(`${KIE_API_BASE}/sora2-pro/text-to-video`, {
+    const submitResponse = await fetch(`${KIE_API_BASE}/jobs/createTask`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${this.apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        prompt,
-        aspect_ratio: kieAspectRatio,
-        n_frames: nFrames,
-        size: "high",
-        remove_watermark: true,
+        model: "sora-2-pro-text-to-video",
+        input: {
+          prompt,
+          aspect_ratio: kieAspectRatio,
+          n_frames: nFrames,
+          size: "high",
+          remove_watermark: true,
+        },
       }),
     });
 
@@ -55,10 +59,10 @@ export class SoraVideoService implements VideoService {
     }
 
     const submitData = await submitResponse.json();
-    const taskId = submitData.data?.task_id || submitData.task_id || submitData.id;
+    const taskId = submitData.data?.taskId || submitData.data?.task_id;
 
     if (!taskId) {
-      throw new Error(`KIE.AI response missing task_id: ${JSON.stringify(submitData)}`);
+      throw new Error(`KIE.AI response missing taskId: ${JSON.stringify(submitData)}`);
     }
 
     console.log(`[Sora Submit] Task started: ${taskId}`);
@@ -87,31 +91,35 @@ export class SoraVideoService implements VideoService {
     };
   }
 
+  /**
+   * Synchronous video generation (submit + internal poll).
+   * Fallback path — the async submit+poll in the worker is preferred.
+   */
   async generateVideo(params: VideoGenerationParams): Promise<VideoOutput> {
     const { prompt, clip_id, duration = 15, aspect_ratio = "9:16" } = params;
-    
+
     try {
-      // Map aspect ratio to KIE.AI format
       const kieAspectRatio = aspect_ratio === "9:16" ? "portrait" : "landscape";
-      
-      // Map duration to n_frames (KIE.AI uses "10" or "15" as strings)
       const nFrames = duration <= 10 ? "10" : "15";
-      
+
       console.log(`Submitting to KIE.AI Sora 2 Pro: ${prompt.substring(0, 50)}...`);
-      
-      // 1. Submit generation request to KIE.AI
-      const submitResponse = await fetch(`${KIE_API_BASE}/sora2-pro/text-to-video`, {
+
+      // 1. Submit via unified jobs API
+      const submitResponse = await fetch(`${KIE_API_BASE}/jobs/createTask`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${this.apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          prompt: prompt,
-          aspect_ratio: kieAspectRatio,
-          n_frames: nFrames,
-          size: "high", // 1080p HD
-          remove_watermark: true,
+          model: "sora-2-pro-text-to-video",
+          input: {
+            prompt,
+            aspect_ratio: kieAspectRatio,
+            n_frames: nFrames,
+            size: "high",
+            remove_watermark: true,
+          },
         }),
       });
 
@@ -121,26 +129,27 @@ export class SoraVideoService implements VideoService {
       }
 
       const submitData = await submitResponse.json();
-      const taskId = submitData.data?.task_id || submitData.task_id || submitData.id;
-      
+      const taskId = submitData.data?.taskId || submitData.data?.task_id;
+
       if (!taskId) {
-        throw new Error(`KIE.AI response missing task_id: ${JSON.stringify(submitData)}`);
+        throw new Error(`KIE.AI response missing taskId: ${JSON.stringify(submitData)}`);
       }
-      
+
       console.log(`KIE.AI task started: ${taskId}`);
-      
-      // 2. Poll for completion (Sora 2 Pro typically takes 1-5 minutes)
+
+      // 2. Poll for completion via unified recordInfo endpoint
       let attempts = 0;
       const maxAttempts = 120; // 10 minutes with 5s intervals
-      let result: { video_url: string } | null = null;
-      
-      while (!result && attempts < maxAttempts) {
-        await new Promise(r => setTimeout(r, 5000)); // 5s polling
+      let videoUrl: string | null = null;
+
+      while (!videoUrl && attempts < maxAttempts) {
+        await new Promise(r => setTimeout(r, 5000));
         attempts++;
-        
-        const statusResponse = await fetch(`${KIE_API_BASE}/tasks/${taskId}`, {
-          headers: { "Authorization": `Bearer ${this.apiKey}` },
-        });
+
+        const statusResponse = await fetch(
+          `${KIE_API_BASE}/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,
+          { headers: { "Authorization": `Bearer ${this.apiKey}` } },
+        );
 
         if (!statusResponse.ok) {
           console.warn(`KIE.AI status check failed, attempt ${attempts}`);
@@ -148,65 +157,63 @@ export class SoraVideoService implements VideoService {
         }
 
         const statusData = await statusResponse.json();
-        const status = statusData.data?.status || statusData.status;
-        
-        console.log(`KIE.AI task ${taskId} status: ${status} (attempt ${attempts})`);
-        
-        if (status === "completed" || status === "succeeded" || status === "success") {
-          const videoUrl = statusData.data?.output?.video_url || 
-                          statusData.data?.video_url || 
-                          statusData.output?.video_url ||
-                          statusData.video_url;
-          if (videoUrl) {
-            result = { video_url: videoUrl };
-          }
-        } else if (status === "failed" || status === "error") {
-          const errorMsg = statusData.data?.error || statusData.error || "Unknown error";
+        const state = statusData.data?.state || statusData.state;
+
+        console.log(`KIE.AI task ${taskId} state: ${state} (attempt ${attempts})`);
+
+        if (state === "success") {
+          videoUrl = this.extractVideoUrl(statusData);
+        } else if (state === "fail" || state === "failed" || state === "error") {
+          const errorMsg = statusData.data?.failMsg || statusData.data?.error || "Unknown error";
           throw new Error(`Sora generation failed: ${errorMsg}`);
         }
-        // Continue polling if still processing
       }
 
-      if (!result) {
+      if (!videoUrl) {
         throw new Error("Sora generation timed out after 10 minutes");
       }
 
-      console.log(`KIE.AI video ready: ${result.video_url}`);
+      console.log(`KIE.AI video ready, downloading...`);
 
       // 3. Download video and upload to Supabase Storage
-      const videoResponse = await fetch(result.video_url);
+      const videoResponse = await fetch(videoUrl);
       if (!videoResponse.ok) {
         throw new Error("Failed to download generated video from KIE.AI");
       }
-      
+
       const videoData = await videoResponse.arrayBuffer();
       const raw_video_url = await uploadVideo("raw", clip_id, videoData);
 
       const actualDuration = nFrames === "15" ? 15 : 10;
-      
+
       return {
         raw_video_url,
         duration_seconds: actualDuration,
         width: kieAspectRatio === "portrait" ? 1080 : 1920,
         height: kieAspectRatio === "portrait" ? 1920 : 1080,
       };
-      
+
     } catch (error) {
       console.error("Sora video generation failed:", error);
       throw error;
     }
   }
 
-  async checkStatus(jobId: string): Promise<{
+  /**
+   * Check status of a previously submitted task.
+   * Uses unified recordInfo endpoint: GET /api/v1/jobs/recordInfo?taskId=...
+   */
+  async checkStatus(taskId: string): Promise<{
     status: "pending" | "processing" | "completed" | "failed";
     progress?: number;
     result?: VideoOutput;
     error?: string;
   }> {
     try {
-      const response = await fetch(`${KIE_API_BASE}/tasks/${jobId}`, {
-        headers: { "Authorization": `Bearer ${this.apiKey}` },
-      });
+      const response = await fetch(
+        `${KIE_API_BASE}/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,
+        { headers: { "Authorization": `Bearer ${this.apiKey}` } },
+      );
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => "unknown");
@@ -215,33 +222,69 @@ export class SoraVideoService implements VideoService {
       }
 
       const data = await response.json();
-      const status = data.data?.status || data.status;
-      
+      const state = data.data?.state || data.state;
+
+      // Map KIE unified states to our internal states
       const statusMap: Record<string, "pending" | "processing" | "completed" | "failed"> = {
+        "waiting": "pending",
+        "queuing": "pending",
         "pending": "pending",
         "queued": "pending",
+        "generating": "processing",
         "processing": "processing",
         "running": "processing",
+        "success": "completed",
         "completed": "completed",
         "succeeded": "completed",
-        "success": "completed",
+        "fail": "failed",
         "failed": "failed",
         "error": "failed",
       };
 
-      const videoUrl = data.data?.output?.video_url || data.data?.video_url || data.video_url;
+      const videoUrl = this.extractVideoUrl(data);
 
       return {
-        status: statusMap[status] || "processing",
+        status: statusMap[state] || "processing",
         progress: data.data?.progress || data.progress,
         result: videoUrl ? {
           raw_video_url: videoUrl,
           duration_seconds: 15,
         } : undefined,
-        error: data.data?.error || data.error,
+        error: data.data?.failMsg || data.data?.error || data.error,
       };
     } catch (error) {
       return { status: "failed", error: String(error) };
     }
+  }
+
+  /**
+   * Extract video URL from KIE unified API response.
+   * The resultJson field is a JSON string containing resultUrls array.
+   */
+  private extractVideoUrl(responseData: any): string | null {
+    const d = responseData.data || responseData;
+
+    // Primary: resultJson contains resultUrls array
+    if (d.resultJson) {
+      try {
+        const parsed = typeof d.resultJson === "string"
+          ? JSON.parse(d.resultJson)
+          : d.resultJson;
+        if (Array.isArray(parsed.resultUrls) && parsed.resultUrls.length > 0) {
+          return parsed.resultUrls[0];
+        }
+        if (parsed.video_url) return parsed.video_url;
+      } catch {
+        // resultJson wasn't valid JSON, try other fields
+      }
+    }
+
+    // Fallback: direct resultUrls array
+    if (Array.isArray(d.resultUrls) && d.resultUrls.length > 0) {
+      return d.resultUrls[0];
+    }
+
+    // Legacy fallbacks
+    return d.output?.video_url || d.video_url || null;
   }
 }
