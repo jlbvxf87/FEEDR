@@ -281,37 +281,40 @@ export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPane
     return () => clearInterval(interval);
   }, [activeNode?.id, allDone]);
 
-  // Calculate estimated remaining time
+  // Calculate estimated remaining time (counts down using elapsed time)
   const estimatedRemaining = useMemo(() => {
     if (allDone) return 0;
     const activeIndex = nodes.findIndex((n) => n.status === "active");
     if (activeIndex === -1) return 0;
-    
-    let remaining = 0;
-    for (let i = activeIndex; i < nodes.length; i++) {
-      // Video and research steps run in parallel across clips; don't multiply by count
-      const parallelSteps = ["video", "research", "generate"];
-      const multiplier = parallelSteps.includes(nodes[i].id) ? 1 : totalCount;
-      remaining += nodes[i].estimatedSeconds * multiplier;
-    }
-    return Math.max(0, remaining);
-  }, [nodes, allDone, totalCount]);
 
-  // Progress percentage (time-weighted so video step doesn't show misleading 57%)
+    // Total estimated time for all steps
+    const parallelSteps = ["video", "research", "generate"];
+    let totalEstimated = 0;
+    for (let i = 0; i < nodes.length; i++) {
+      const multiplier = parallelSteps.includes(nodes[i].id) ? 1 : totalCount;
+      totalEstimated += nodes[i].estimatedSeconds * multiplier;
+    }
+
+    // Remaining = total estimate minus actual elapsed time
+    return Math.max(0, totalEstimated - elapsedSeconds);
+  }, [nodes, allDone, totalCount, elapsedSeconds]);
+
+  // Detect if we've exceeded the estimate (Sora taking longer than usual)
+  const isOvertime = estimatedRemaining === 0 && !allDone;
+
+  // Progress percentage based on elapsed vs total estimated time
   const progress = useMemo(() => {
     if (allDone) return 100;
-    const totalTime = nodes.reduce((sum, n) => sum + n.estimatedSeconds, 0);
-    if (totalTime === 0) return 0;
-    let completedTime = 0;
+    const parallelSteps = ["video", "research", "generate"];
+    let totalEstimated = 0;
     for (const node of nodes) {
-      if (node.status === "complete") {
-        completedTime += node.estimatedSeconds;
-      } else if (node.status === "active") {
-        completedTime += node.estimatedSeconds * 0.5;
-      }
+      const multiplier = parallelSteps.includes(node.id) ? 1 : totalCount;
+      totalEstimated += node.estimatedSeconds * multiplier;
     }
-    return Math.min(95, Math.round((completedTime / totalTime) * 100));
-  }, [nodes, allDone]);
+    if (totalEstimated === 0) return 0;
+    // Cap at 95% until actually done — never show 100% while still processing
+    return Math.min(95, Math.round((elapsedSeconds / totalEstimated) * 100));
+  }, [nodes, allDone, elapsedSeconds, totalCount]);
 
   return (
     <div className="bg-[#0B0E11] border border-[#1C2230] rounded-2xl overflow-hidden">
@@ -354,6 +357,9 @@ export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPane
             </div>
             {!allDone && estimatedRemaining > 0 && (
               <p className="text-xs text-[#6B7A8F]">~{formatTime(estimatedRemaining)} left</p>
+            )}
+            {isOvertime && (
+              <p className="text-xs text-[#F59E0B]">Taking a bit longer...</p>
             )}
             {allDone && (
               <p className="text-xs text-[#2EE6C9] font-medium">Built from viral data ✓</p>
