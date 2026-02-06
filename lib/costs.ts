@@ -46,6 +46,11 @@ export const MODEL_COSTS = {
     "shotstack": { perRender: 5, quality: 0.9 },
     "creatomate": { perRender: 4, quality: 0.85 },
   },
+
+  // Post-processing (cost per video in cents)
+  postProcessing: {
+    "watermark-remover": { perVideo: 5, quality: 1.0 },
+  },
 };
 
 // Quality tier configurations
@@ -116,12 +121,16 @@ export function estimateVideoCost(
   
   // Assembly cost
   const assemblyCost = 5;
-  
+
+  // Watermark removal cost (included in estimate even if disabled — covers the feature)
+  const watermarkCost = MODEL_COSTS.postProcessing["watermark-remover"].perVideo;
+
   const breakdown = {
     script: Math.round(scriptCost * 100) / 100,
     voice: Math.round(voiceCost * 100) / 100,
     video: Math.round(videoCost * 100) / 100,
     assembly: assemblyCost,
+    watermarkRemoval: watermarkCost,
   };
   
   // Base cost is our actual cost

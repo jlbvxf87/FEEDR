@@ -11,14 +11,15 @@ import { PRESET_OVERLAY_CONFIGS } from "../_shared/services/assembly/interface.t
 import type { TrendAnalysis, ScrapedVideo, ContentCategory } from "../_shared/services/research/interface.ts";
 import { detectCategory, CATEGORY_DETECTION, getViralThreshold } from "../_shared/services/research/interface.ts";
 import { VIDEO_DURATION, SCRIPT_CONSTRAINTS } from "../_shared/timing.ts";
-import { 
-  classifyError, 
-  preFlightVideoCheck, 
-  validateSoraPrompt, 
+import {
+  classifyError,
+  preFlightVideoCheck,
+  validateSoraPrompt,
   enhanceSoraPrompt,
   validateVariationDiversity,
   estimateBatchCost,
 } from "../_shared/quality.ts";
+import { removeWatermark } from "../_shared/services/video/watermarkRemover.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -683,6 +684,27 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
       raw_video_url = uploadResult.raw_video_url;
       duration_seconds = uploadResult.duration_seconds || duration_seconds;
 
+      // Optional: Run watermark remover as a second pass
+      if (Deno.env.get("ENABLE_WATERMARK_REMOVAL") === "true") {
+        try {
+          const kieApiKey = Deno.env.get("KIE_API_KEY") || Deno.env.get("KEIAPI_API_KEY") || "";
+          console.log(`[Video Poll] Running watermark remover on clip ${job.clip_id}...`);
+          const cleaned = await removeWatermark(raw_video_url, kieApiKey);
+
+          // Download cleaned video and overwrite in storage
+          if (videoService.downloadAndUploadVideo) {
+            const cleanedUpload = await videoService.downloadAndUploadVideo(cleaned.videoUrl, job.clip_id);
+            raw_video_url = cleanedUpload.raw_video_url;
+          } else {
+            raw_video_url = cleaned.videoUrl;
+          }
+          console.log(`[Video Poll] Watermark removed for clip ${job.clip_id}`);
+        } catch (wmError) {
+          // Non-fatal: proceed with original video if remover fails
+          console.warn(`[Video Poll] Watermark removal failed (using original): ${wmError}`);
+        }
+      }
+
       // Update clip with video URL
       await supabase
         .from("clips")
@@ -837,6 +859,25 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
 
       raw_video_url = result.raw_video_url;
       duration_seconds = result.duration_seconds || duration_seconds;
+
+      // Optional: Run watermark remover as a second pass
+      if (Deno.env.get("ENABLE_WATERMARK_REMOVAL") === "true") {
+        try {
+          const kieApiKey = Deno.env.get("KIE_API_KEY") || Deno.env.get("KEIAPI_API_KEY") || "";
+          console.log(`[Video Sync] Running watermark remover on clip ${job.clip_id}...`);
+          const cleaned = await removeWatermark(raw_video_url, kieApiKey);
+
+          if (videoService.downloadAndUploadVideo) {
+            const cleanedUpload = await videoService.downloadAndUploadVideo(cleaned.videoUrl, job.clip_id);
+            raw_video_url = cleanedUpload.raw_video_url;
+          } else {
+            raw_video_url = cleaned.videoUrl;
+          }
+          console.log(`[Video Sync] Watermark removed for clip ${job.clip_id}`);
+        } catch (wmError) {
+          console.warn(`[Video Sync] Watermark removal failed (using original): ${wmError}`);
+        }
+      }
 
       await supabase
         .from("clips")
