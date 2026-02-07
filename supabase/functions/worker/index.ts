@@ -188,6 +188,46 @@ serve(async (req) => {
       console.log(`[Recovery] Reset ${resetCount} stuck jobs to queued`);
     }
 
+    // Recovery: re-queue failed Sora video jobs that may have completed after timeout
+    // Only re-queues jobs that already have a task id (no re-submit, just re-poll)
+    try {
+      const recoveryWindowIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: failedVideoJobs, error: failedVideoError } = await supabase
+        .from("jobs")
+        .select("id, payload_json")
+        .eq("type", "video")
+        .eq("status", "failed")
+        .gte("updated_at", recoveryWindowIso)
+        .not("payload_json->>sora_task_id", "is", null)
+        .limit(5);
+
+      if (failedVideoError) {
+        console.warn("[Recovery] Failed to fetch failed video jobs:", failedVideoError.message);
+      } else if (failedVideoJobs && failedVideoJobs.length > 0) {
+        for (const failedJob of failedVideoJobs) {
+          const payload = failedJob.payload_json || {};
+          const updatedPayload = {
+            ...payload,
+            sora_submitted_at: Date.now(),
+            video_service: payload.video_service || "sora",
+          };
+          await supabase
+            .from("jobs")
+            .update({
+              status: "queued",
+              error: null,
+              attempts: 0,
+              payload_json: updatedPayload,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", failedJob.id);
+        }
+        console.log(`[Recovery] Re-queued ${failedVideoJobs.length} failed video jobs for late completion checks`);
+      }
+    } catch (recoveryError) {
+      console.warn("[Recovery] Late-completion recovery failed:", (recoveryError as Error).message);
+    }
+
     // ATOMIC JOB CLAIM: Use RPC to claim job with FOR UPDATE SKIP LOCKED
     // This prevents race conditions when multiple workers run concurrently
     const { data: claimedJobs, error: claimError } = await supabase.rpc("claim_next_job");
