@@ -30,7 +30,7 @@ const corsHeaders = {
 const MAX_RETRIES = 3;
 const JOB_TIMEOUT_MS = 55000; // 55 seconds max per job
 const HEARTBEAT_INTERVAL_MS = 30000; // Update heartbeat every 30 seconds for long jobs
-const MAX_VIDEO_POLL_MS = 420_000; // 7 minutes max polling for Sora video generation
+const MAX_VIDEO_POLL_MS = 720_000; // 12 minutes max polling for Sora video generation
 const MAX_SORA_PROMPT_CHARS = 800; // Cap prompt length to prevent KIE.AI issues
 
 // Timeout wrapper for async operations
