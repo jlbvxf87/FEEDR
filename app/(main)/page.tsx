@@ -98,6 +98,14 @@ function FeedPageContent() {
       batchSize,
     };
   }, [qualityMode, outputType, videoBatchSize, imageBatchSize, videoService]);
+  const estimatedMinutes = useMemo(() => {
+    if (outputType === "image") return 2;
+    const batchSize = outputType === "image" ? imageBatchSize : videoBatchSize;
+    const baseSeconds = 45 + 10 + 12 + 15; // research + script + voice + merge
+    const videoSeconds = videoService === "kling" ? 240 : 360;
+    const batchPenalty = batchSize <= 2 ? 1 : 1 + (batchSize - 2) * 0.1;
+    return Math.ceil(((baseSeconds + videoSeconds) * batchPenalty) / 60);
+  }, [outputType, videoService, videoBatchSize, imageBatchSize]);
 
   // Load initial data
   useEffect(() => {
@@ -640,7 +648,7 @@ function FeedPageContent() {
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-xs text-[#4B5563]">
-                  ~{outputType === "video" ? `${Math.ceil((45 + 10 + 12 + 270 + 15) / 60)}` : "2"} min
+                  ~{estimatedMinutes} min
                 </span>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-[#6B7A8F]">Est.</span>
@@ -810,6 +818,7 @@ function FeedPageContent() {
               clips={clips}
               batch={currentBatch}
               onCancel={handleCancel}
+              videoService={videoService}
             />
           </section>
         )}

@@ -10,6 +10,7 @@ interface ManufacturingPanelProps {
   batch: Batch & { estimated_cost?: number };
   recentWinners?: Clip[];
   onCancel?: () => void;
+  videoService?: "sora" | "kling";
 }
 
 interface Node {
@@ -20,20 +21,23 @@ interface Node {
   estimatedSeconds: number;
 }
 
-// Estimated time in seconds for each step (for user-friendly estimates)
-const STEP_TIMES = {
-  input: 0,
-  research: 45,  // Brain + Apify scraping + analysis
-  script: 10,
-  voice: 12,
-  video: 270, // Sora takes 3-5 minutes; use 4.5 min for realistic estimate
-  merge: 15,
-  output: 0,
-  prompt: 10,
-  generate: 30,
-};
+function getStepTimes(videoService: "sora" | "kling") {
+  const videoSeconds = videoService === "kling" ? 240 : 360; // Kling ~4m, Sora ~6m typical
+  return {
+    input: 0,
+    research: 45,  // Brain + Apify scraping + analysis
+    script: 10,
+    voice: 12,
+    video: videoSeconds,
+    merge: 15,
+    output: 0,
+    prompt: 10,
+    generate: 30,
+  };
+}
 
-function getNodes(clips: Clip[], outputType: string, batchStatus: string, hasResearch: boolean): Node[] {
+function getNodes(clips: Clip[], outputType: string, batchStatus: string, hasResearch: boolean, videoService: "sora" | "kling"): Node[] {
+  const stepTimes = getStepTimes(videoService);
   const statusCounts: Record<string, number> = {
     planned: 0, scripting: 0, vo: 0, rendering: 0,
     generating: 0, assembling: 0, ready: 0, failed: 0,
@@ -72,22 +76,22 @@ function getNodes(clips: Clip[], outputType: string, batchStatus: string, hasRes
 
   if (outputType === "image") {
     return [
-      { id: "input", label: "Input", icon: "📝", status: "complete", estimatedSeconds: STEP_TIMES.input },
-      { id: "research", label: "Research", icon: "🔍", status: getStatus(researchComplete, isResearching), estimatedSeconds: STEP_TIMES.research },
-      { id: "prompt", label: "Prompt", icon: "⚡", status: getStatus(hasScripting, researchComplete && !hasScripting), estimatedSeconds: STEP_TIMES.prompt },
-      { id: "generate", label: "Generate", icon: "🎨", status: getStatus(allReady, hasScripting && !allReady), estimatedSeconds: STEP_TIMES.generate },
-      { id: "output", label: "Output", icon: "✨", status: getStatus(allReady, false), estimatedSeconds: STEP_TIMES.output },
+      { id: "input", label: "Input", icon: "📝", status: "complete", estimatedSeconds: stepTimes.input },
+      { id: "research", label: "Research", icon: "🔍", status: getStatus(researchComplete, isResearching), estimatedSeconds: stepTimes.research },
+      { id: "prompt", label: "Prompt", icon: "⚡", status: getStatus(hasScripting, researchComplete && !hasScripting), estimatedSeconds: stepTimes.prompt },
+      { id: "generate", label: "Generate", icon: "🎨", status: getStatus(allReady, hasScripting && !allReady), estimatedSeconds: stepTimes.generate },
+      { id: "output", label: "Output", icon: "✨", status: getStatus(allReady, false), estimatedSeconds: stepTimes.output },
     ];
   }
 
   return [
-    { id: "input", label: "Input", icon: "📝", status: "complete", estimatedSeconds: STEP_TIMES.input },
-    { id: "research", label: "Research", icon: "🔍", status: getStatus(researchComplete, isResearching), estimatedSeconds: STEP_TIMES.research },
-    { id: "script", label: "Script", icon: "✍️", status: getStatus(hasVo, researchComplete && statusCounts.scripting > 0), estimatedSeconds: STEP_TIMES.script },
-    { id: "voice", label: "Voice", icon: "🎙️", status: getStatus(hasRendering || hasVoiceData, statusCounts.vo > 0 && !hasVoiceData), estimatedSeconds: STEP_TIMES.voice },
-    { id: "video", label: "Video", icon: "🎬", status: getStatus(hasAssembling, hasRendering && !hasAssembling), estimatedSeconds: STEP_TIMES.video },
-    { id: "merge", label: "Merge", icon: "🔗", status: getStatus(allReady, statusCounts.assembling > 0), estimatedSeconds: STEP_TIMES.merge },
-    { id: "output", label: "Output", icon: "✨", status: getStatus(allReady, false), estimatedSeconds: STEP_TIMES.output },
+    { id: "input", label: "Input", icon: "📝", status: "complete", estimatedSeconds: stepTimes.input },
+    { id: "research", label: "Research", icon: "🔍", status: getStatus(researchComplete, isResearching), estimatedSeconds: stepTimes.research },
+    { id: "script", label: "Script", icon: "✍️", status: getStatus(hasVo, researchComplete && statusCounts.scripting > 0), estimatedSeconds: stepTimes.script },
+    { id: "voice", label: "Voice", icon: "🎙️", status: getStatus(hasRendering || hasVoiceData, statusCounts.vo > 0 && !hasVoiceData), estimatedSeconds: stepTimes.voice },
+    { id: "video", label: "Video", icon: "🎬", status: getStatus(hasAssembling, hasRendering && !hasAssembling), estimatedSeconds: stepTimes.video },
+    { id: "merge", label: "Merge", icon: "🔗", status: getStatus(allReady, statusCounts.assembling > 0), estimatedSeconds: stepTimes.merge },
+    { id: "output", label: "Output", icon: "✨", status: getStatus(allReady, false), estimatedSeconds: stepTimes.output },
   ];
 }
 
@@ -115,12 +119,11 @@ const STATUS_MESSAGES: Record<string, string[]> = {
     "Adding the right energy and pacing...",
   ],
   video: [
-    "Sora is building your world (3-5 min)...",
     "Rendering each frame with AI precision...",
     "Piecing together cinematic visuals...",
     "Teaching pixels to tell your story...",
     "Generating scenes frame by frame...",
-    "Sora is cooking... almost there...",
+    "Rendering is cooking... almost there...",
     "Still rendering — quality takes a moment...",
     "Wrangling AI neurons into art...",
     "Painting with light and motion...",
@@ -256,12 +259,13 @@ function formatTime(seconds: number): string {
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
 
-// Live preview of content created so far — keeps users engaged during Sora wait
-function ContentPreview({ clips, activeStepId, elapsedSeconds, batchCreatedAt }: {
+// Live preview of content created so far — keeps users engaged during video generation
+function ContentPreview({ clips, activeStepId, elapsedSeconds, batchCreatedAt, videoService }: {
   clips: Clip[];
   activeStepId?: string;
   elapsedSeconds: number;
   batchCreatedAt: string;
+  videoService: "sora" | "kling";
 }) {
   const [expandedClip, setExpandedClip] = useState(0);
   const clip = clips[expandedClip] || clips[0];
@@ -277,6 +281,8 @@ function ContentPreview({ clips, activeStepId, elapsedSeconds, batchCreatedAt }:
   const hasVoice = !!clip?.voice_url;
   const hasSoraPrompt = !!clip?.sora_prompt;
   const isVideoStep = activeStepId === "video";
+  const videoEtaSeconds = videoService === "kling" ? 240 : 360;
+  const videoServiceLabel = videoService === "kling" ? "Kling" : "Sora";
 
   return (
     <div className="px-5 py-4 border-t border-[#1C2230] space-y-3">
@@ -323,16 +329,16 @@ function ContentPreview({ clips, activeStepId, elapsedSeconds, batchCreatedAt }:
         </div>
       )}
 
-      {/* Sora prompt + video step timer */}
+      {/* Video prompt + video step timer */}
       {hasSoraPrompt && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <p className="text-[10px] font-medium text-[#0095FF] uppercase tracking-wider">
-              Sora Prompt
+              Video Prompt
             </p>
             {isVideoStep && videoStepElapsed > 0 && (
               <span className="text-[10px] text-[#4B5563]">
-                Rendering: {formatTime(videoStepElapsed)} / ~4-5m
+                Rendering: {formatTime(videoStepElapsed)} / ~{Math.round(videoEtaSeconds / 60)}m ({videoServiceLabel})
               </span>
             )}
           </div>
@@ -345,11 +351,14 @@ function ContentPreview({ clips, activeStepId, elapsedSeconds, batchCreatedAt }:
   );
 }
 
-export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPanelProps) {
+export function ManufacturingPanel({ clips, batch, onCancel, videoService = "sora" }: ManufacturingPanelProps) {
   const outputType = batch.output_type || "video";
   const estimatedCost = batch.estimated_cost || 0;
   const hasResearch = !!batch.research_json;
-  const nodes = useMemo(() => getNodes(clips, outputType, batch.status, hasResearch), [clips, outputType, batch.status, hasResearch]);
+  const nodes = useMemo(
+    () => getNodes(clips, outputType, batch.status, hasResearch, videoService),
+    [clips, outputType, batch.status, hasResearch, videoService]
+  );
   const readyCount = clips.filter((c) => c.status === "ready").length;
   const totalCount = clips.length;
   const allDone = readyCount === totalCount && totalCount > 0;
@@ -378,7 +387,9 @@ export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPane
   useEffect(() => {
     if (!activeNode || allDone) return;
 
-    const messages = STATUS_MESSAGES[activeNode.id] || ["Processing..."];
+    const messages = activeNode.id === "video"
+      ? [`${videoService === "kling" ? "Kling" : "Sora"} is rendering your video...`, ...STATUS_MESSAGES.video]
+      : (STATUS_MESSAGES[activeNode.id] || ["Processing..."]);
     let index = 0;
     setStatusMessage(messages[0]);
 
@@ -391,7 +402,7 @@ export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPane
     }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [activeNode?.id, allDone]);
+  }, [activeNode?.id, allDone, videoService]);
 
   // Track when the active step started (to measure actual step durations)
   const [activeStepStartTime, setActiveStepStartTime] = useState<number>(Date.now());
@@ -399,6 +410,9 @@ export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPane
     setActiveStepStartTime(Date.now());
   }, [activeNode?.id]);
   const activeStepElapsed = Math.max(0, Math.floor((Date.now() - activeStepStartTime) / 1000));
+  const videoEtaSeconds = videoService === "kling" ? 240 : 360;
+  const showSlowModeBanner = activeNode?.id === "video" && activeStepElapsed > videoEtaSeconds;
+  const slowModeLabel = videoService === "kling" ? "Kling" : "Sora";
 
   // Adaptive remaining time: only count pending + active steps, not completed ones
   const estimatedRemaining = useMemo(() => {
@@ -494,7 +508,7 @@ export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPane
               <p className="text-xs text-[#6B7A8F]">~{formatTime(estimatedRemaining)} left</p>
             )}
             {isOvertime && activeNode?.id === "video" && (
-              <p className="text-xs text-[#6B7A8F]">Sora is still rendering...</p>
+              <p className="text-xs text-[#6B7A8F]">{slowModeLabel} is still rendering...</p>
             )}
             {isOvertime && activeNode?.id !== "video" && (
               <p className="text-xs text-[#F59E0B]">Taking a bit longer...</p>
@@ -531,6 +545,11 @@ export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPane
             )}
           </div>
         </div>
+        {showSlowModeBanner && (
+          <div className="mt-3 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/10 px-3 py-2 text-[11px] text-[#F59E0B]">
+            High demand on {slowModeLabel} right now. We’re still working — this can take a few extra minutes.
+          </div>
+        )}
 
         {/* Progress bar */}
         {!allDone && (
@@ -564,7 +583,7 @@ export function ManufacturingPanel({ clips, batch, onCancel }: ManufacturingPane
 
       {/* Live content preview — shows what's been created so far */}
       {!allDone && clips.length > 0 && clips[0].script_spoken && (
-        <ContentPreview clips={clips} activeStepId={activeNode?.id} elapsedSeconds={elapsedSeconds} batchCreatedAt={batch.created_at} />
+        <ContentPreview clips={clips} activeStepId={activeNode?.id} elapsedSeconds={elapsedSeconds} batchCreatedAt={batch.created_at} videoService={videoService} />
       )}
 
       {/* Failure summary - shown when batch has failed clips */}
