@@ -128,7 +128,7 @@ function FeedPageContent() {
   }, [qualityMode, outputType, videoBatchSize, imageBatchSize, videoService]);
   const estimatedMinutes = useMemo(() => {
     if (outputType === "image") return 2;
-    const batchSize = outputType === "image" ? imageBatchSize : videoBatchSize;
+    const batchSize = videoBatchSize;
     const baseSeconds = 45 + 10 + 12 + 15; // research + script + voice + merge
     const videoSeconds = videoService === "kling" ? 240 : 360;
     const batchPenalty = batchSize <= 2 ? 1 : 1 + (batchSize - 2) * 0.1;
