@@ -52,7 +52,7 @@ function FeedPageContent() {
   
   // Quality mode - user controls which models to use
   const [qualityMode, setQualityMode] = useState<QualityMode>("good");
-  const [videoService, setVideoService] = useState<"sora" | "kling">("sora");
+  const [videoService, setVideoService] = useState<"sora" | "kling">("kling");
   
   // Cost tracking
   const [totalSpent, setTotalSpent] = useState(0);
@@ -525,8 +525,8 @@ function FeedPageContent() {
               </div>
             </div>
 
-            {/* Row 2.5: Video service selector (dev only) */}
-            {isDevMode && outputType === "video" && (
+            {/* Row 2.5: Video service selector */}
+            {outputType === "video" && (
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[#6B7A8F]">Video Service</span>
                 <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
@@ -585,6 +585,14 @@ function FeedPageContent() {
                         {qualityMode === "fast" ? "Basic TTS" : qualityMode === "good" ? "ElevenLabs" : "ElevenLabs HD"}
                       </span>
                     </div>
+                    {outputType === "video" && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7A8F]">Video</span>
+                        <span className="text-white font-medium">
+                          {videoService === "kling" ? "Kling 2.6" : "Sora 2 Pro"}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-[#6B7A8F]">{outputType === "video" ? "Video" : "Image"}</span>
                       <span className="text-white font-medium">
