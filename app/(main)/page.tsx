@@ -53,10 +53,11 @@ function FeedPageContent() {
   // Quality mode - user controls which models to use
   const [qualityMode, setQualityMode] = useState<QualityMode>("good");
   const [videoService, setVideoService] = useState<"sora" | "kling">("sora");
-  const [adFormat, setAdFormat] = useState<AdFormat>("ugc_testimonial");
+  const [adFormat, setAdFormat] = useState<AdFormat>("problem_solution");
   const [outcomeGoal, setOutcomeGoal] = useState<OutcomeGoal>("conversion");
   const [sceneCount, setSceneCount] = useState<SceneCount>(4);
   const [complianceFlags, setComplianceFlags] = useState<ComplianceFlag[]>([]);
+  const [marketSegment, setMarketSegment] = useState<"ads" | "ugc" | "launch">("ads");
   const [useReferenceImages, setUseReferenceImages] = useState(false);
   const [productRefUrl, setProductRefUrl] = useState<string | null>(null);
   const [personRefUrl, setPersonRefUrl] = useState<string | null>(null);
@@ -88,6 +89,34 @@ function FeedPageContent() {
     { value: "no_medication_shown", label: "No medication shown" },
     { value: "no_exaggerated_results", label: "No exaggerated results" },
   ];
+
+  const segmentOptions: Array<{ value: "ads" | "ugc" | "launch"; label: string }> = [
+    { value: "ads", label: "Ads" },
+    { value: "ugc", label: "UGC" },
+    { value: "launch", label: "Product Launch" },
+  ];
+
+  const applySegmentDefaults = useCallback((segment: "ads" | "ugc" | "launch") => {
+    setMarketSegment(segment);
+    if (segment === "ads") {
+      setAdFormat("problem_solution");
+      setOutcomeGoal("conversion");
+      setSceneCount(4);
+      setComplianceFlags([]);
+      return;
+    }
+    if (segment === "ugc") {
+      setAdFormat("ugc_testimonial");
+      setOutcomeGoal("awareness");
+      setSceneCount(4);
+      setComplianceFlags([]);
+      return;
+    }
+    setAdFormat("product_demo");
+    setOutcomeGoal("awareness");
+    setSceneCount(5);
+    setComplianceFlags([]);
+  }, []);
 
   const supabase = createClient();
 
@@ -659,6 +688,25 @@ function FeedPageContent() {
 
             {outputType === "video" && (
               <div className="space-y-3 pt-2 border-t border-[#1C2230]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[#6B7A8F]">Use Case</span>
+                  <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
+                    {segmentOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => applySegmentDefaults(opt.value)}
+                        className={cn(
+                          "px-4 h-7 rounded-full text-xs font-semibold transition-all",
+                          marketSegment === opt.value
+                            ? "bg-[#2EE6C9] text-[#0B0E11]"
+                            : "text-[#6B7A8F] hover:text-white"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-[#6B7A8F]">Ad Format</span>
                   <div className="flex flex-wrap justify-end gap-2">
