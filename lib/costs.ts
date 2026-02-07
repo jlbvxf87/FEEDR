@@ -7,6 +7,10 @@ export type QualityMode = "fast" | "good" | "better";
 export const UPSELL_MULTIPLIER = 1.5;
 
 // Cost per 1M tokens (in cents) - BASE COSTS (our actual costs)
+type VideoCost =
+  | { per10s: number; per15s: number; quality: number }
+  | { per5s: number; per10s: number; quality: number };
+
 export const MODEL_COSTS = {
   // Script/Brain models
   script: {
@@ -30,9 +34,9 @@ export const MODEL_COSTS = {
   // Video models (cost per video in cents, by duration)
   video: {
     // Sora 2 Pro (KIE.AI): 10s / 15s tiers
-    "sora": { per10s: 100, per15s: 150, quality: 0.95 },
+    "sora": { per10s: 100, per15s: 150, quality: 0.95 } satisfies VideoCost,
     // Kling 2.6 (KIE.AI): HD no-audio pricing
-    "kling": { per5s: 28, per10s: 55, quality: 0.9 },
+    "kling": { per5s: 28, per10s: 55, quality: 0.9 } satisfies VideoCost,
   },
   
   // Image models (cost per image in cents)
@@ -120,10 +124,10 @@ export function estimateVideoCost(
   const voiceCost = voiceCosts ? scriptLength * voiceCosts.perChar : 2;
   
   // Video cost (service-specific tiers)
-  const videoCosts = MODEL_COSTS.video[videoService as keyof typeof MODEL_COSTS.video];
+  const videoCosts = MODEL_COSTS.video[videoService as keyof typeof MODEL_COSTS.video] as VideoCost | undefined;
   let videoCost = 150;
   if (videoCosts) {
-    if (videoService === "kling") {
+    if ("per5s" in videoCosts) {
       const capped = Math.min(durationSeconds, 10);
       videoCost = capped <= 5 ? videoCosts.per5s : videoCosts.per10s;
     } else {
