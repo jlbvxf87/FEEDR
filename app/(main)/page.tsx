@@ -62,6 +62,7 @@ function FeedPageContent() {
   const [productRefUrl, setProductRefUrl] = useState<string | null>(null);
   const [personRefUrl, setPersonRefUrl] = useState<string | null>(null);
   const [uploadingRefs, setUploadingRefs] = useState(false);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   
@@ -708,138 +709,157 @@ function FeedPageContent() {
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#6B7A8F]">Ad Format</span>
-                  <div className="flex flex-wrap justify-end gap-2">
-                    {adFormatOptions.map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setAdFormat(opt.value)}
-                        className={cn(
-                          "px-3 h-7 rounded-full text-xs font-semibold transition-all",
-                          adFormat === opt.value
-                            ? "bg-[#2EE6C9] text-[#0B0E11]"
-                            : "bg-[#0B0E11] text-[#6B7A8F] hover:text-white"
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
+                  <span className="text-xs text-[#6B7A8F]">Advanced</span>
+                  <button
+                    onClick={() => setShowAdvancedOptions((prev) => !prev)}
+                    className={cn(
+                      "px-3 h-7 rounded-full text-xs font-semibold transition-all",
+                      showAdvancedOptions
+                        ? "bg-[#2EE6C9] text-[#0B0E11]"
+                        : "bg-[#0B0E11] text-[#6B7A8F] hover:text-white"
+                    )}
+                  >
+                    {showAdvancedOptions ? "Hide" : "Show"}
+                  </button>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#6B7A8F]">Outcome</span>
-                  <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
-                    {outcomeOptions.map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setOutcomeGoal(opt.value)}
-                        className={cn(
-                          "px-4 h-7 rounded-full text-xs font-semibold transition-all",
-                          outcomeGoal === opt.value
-                            ? "bg-[#2EE6C9] text-[#0B0E11]"
-                            : "text-[#6B7A8F] hover:text-white"
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#6B7A8F]">Scenes</span>
-                  <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
-                    {([3, 4, 5] as const).map((count) => (
-                      <button
-                        key={count}
-                        onClick={() => setSceneCount(count)}
-                        className={cn(
-                          "w-9 h-7 rounded-full text-xs font-semibold transition-all",
-                          sceneCount === count
-                            ? "bg-[#2EE6C9] text-[#0B0E11]"
-                            : "text-[#6B7A8F] hover:text-white"
-                        )}
-                      >
-                        {count}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <span className="text-xs text-[#6B7A8F]">Compliance</span>
-                  <div className="flex flex-wrap gap-2">
-                    {complianceOptions.map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() => toggleCompliance(opt.value)}
-                        className={cn(
-                          "px-3 h-7 rounded-full text-xs font-semibold transition-all border",
-                          complianceFlags.includes(opt.value)
-                            ? "bg-[#F59E0B]/20 text-[#F59E0B] border-[#F59E0B]/40"
-                            : "bg-[#0B0E11] text-[#6B7A8F] border-[#1C2230] hover:text-white"
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2 pt-2 border-t border-[#1C2230]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-[#6B7A8F]">Reference Images (I2V)</span>
-                    <button
-                      onClick={() => setUseReferenceImages((prev) => !prev)}
-                      className={cn(
-                        "px-3 h-7 rounded-full text-xs font-semibold transition-all",
-                        useReferenceImages
-                          ? "bg-[#2EE6C9] text-[#0B0E11]"
-                          : "bg-[#0B0E11] text-[#6B7A8F] hover:text-white"
-                      )}
-                    >
-                      {useReferenceImages ? "On" : "Off"}
-                    </button>
-                  </div>
-
-                  {useReferenceImages && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="flex flex-col gap-2 text-xs text-[#6B7A8F]">
-                        Product Image
-                        <input
-                          type="file"
-                          accept="image/*"
-                          disabled={uploadingRefs}
-                          onChange={(e) => {
-                            const file = e.currentTarget.files?.[0];
-                            if (file) uploadReferenceImage(file, "product");
-                          }}
-                          className="text-[11px] text-[#9CA3AF]"
-                        />
-                        {productRefUrl && (
-                          <img src={productRefUrl} alt="Product reference" className="h-16 w-full object-cover rounded-md border border-[#1C2230]" />
-                        )}
-                      </label>
-                      <label className="flex flex-col gap-2 text-xs text-[#6B7A8F]">
-                        Person Image
-                        <input
-                          type="file"
-                          accept="image/*"
-                          disabled={uploadingRefs}
-                          onChange={(e) => {
-                            const file = e.currentTarget.files?.[0];
-                            if (file) uploadReferenceImage(file, "person");
-                          }}
-                          className="text-[11px] text-[#9CA3AF]"
-                        />
-                        {personRefUrl && (
-                          <img src={personRefUrl} alt="Person reference" className="h-16 w-full object-cover rounded-md border border-[#1C2230]" />
-                        )}
-                      </label>
+                {showAdvancedOptions && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#6B7A8F]">Ad Format</span>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {adFormatOptions.map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => setAdFormat(opt.value)}
+                            className={cn(
+                              "px-3 h-7 rounded-full text-xs font-semibold transition-all",
+                              adFormat === opt.value
+                                ? "bg-[#2EE6C9] text-[#0B0E11]"
+                                : "bg-[#0B0E11] text-[#6B7A8F] hover:text-white"
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  )}
-                </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#6B7A8F]">Outcome</span>
+                      <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
+                        {outcomeOptions.map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => setOutcomeGoal(opt.value)}
+                            className={cn(
+                              "px-4 h-7 rounded-full text-xs font-semibold transition-all",
+                              outcomeGoal === opt.value
+                                ? "bg-[#2EE6C9] text-[#0B0E11]"
+                                : "text-[#6B7A8F] hover:text-white"
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#6B7A8F]">Scenes</span>
+                      <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
+                        {([3, 4, 5] as const).map((count) => (
+                          <button
+                            key={count}
+                            onClick={() => setSceneCount(count)}
+                            className={cn(
+                              "w-9 h-7 rounded-full text-xs font-semibold transition-all",
+                              sceneCount === count
+                                ? "bg-[#2EE6C9] text-[#0B0E11]"
+                                : "text-[#6B7A8F] hover:text-white"
+                            )}
+                          >
+                            {count}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="text-xs text-[#6B7A8F]">Compliance</span>
+                      <div className="flex flex-wrap gap-2">
+                        {complianceOptions.map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => toggleCompliance(opt.value)}
+                            className={cn(
+                              "px-3 h-7 rounded-full text-xs font-semibold transition-all border",
+                              complianceFlags.includes(opt.value)
+                                ? "bg-[#F59E0B]/20 text-[#F59E0B] border-[#F59E0B]/40"
+                                : "bg-[#0B0E11] text-[#6B7A8F] border-[#1C2230] hover:text-white"
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t border-[#1C2230]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-[#6B7A8F]">Reference Images (I2V)</span>
+                        <button
+                          onClick={() => setUseReferenceImages((prev) => !prev)}
+                          className={cn(
+                            "px-3 h-7 rounded-full text-xs font-semibold transition-all",
+                            useReferenceImages
+                              ? "bg-[#2EE6C9] text-[#0B0E11]"
+                              : "bg-[#0B0E11] text-[#6B7A8F] hover:text-white"
+                          )}
+                        >
+                          {useReferenceImages ? "On" : "Off"}
+                        </button>
+                      </div>
+
+                      {useReferenceImages && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="flex flex-col gap-2 text-xs text-[#6B7A8F]">
+                            Product Image
+                            <input
+                              type="file"
+                              accept="image/*"
+                              disabled={uploadingRefs}
+                              onChange={(e) => {
+                                const file = e.currentTarget.files?.[0];
+                                if (file) uploadReferenceImage(file, "product");
+                              }}
+                              className="text-[11px] text-[#9CA3AF]"
+                            />
+                            {productRefUrl && (
+                              <img src={productRefUrl} alt="Product reference" className="h-16 w-full object-cover rounded-md border border-[#1C2230]" />
+                            )}
+                          </label>
+                          <label className="flex flex-col gap-2 text-xs text-[#6B7A8F]">
+                            Person Image
+                            <input
+                              type="file"
+                              accept="image/*"
+                              disabled={uploadingRefs}
+                              onChange={(e) => {
+                                const file = e.currentTarget.files?.[0];
+                                if (file) uploadReferenceImage(file, "person");
+                              }}
+                              className="text-[11px] text-[#9CA3AF]"
+                            />
+                            {personRefUrl && (
+                              <img src={personRefUrl} alt="Person reference" className="h-16 w-full object-cover rounded-md border border-[#1C2230]" />
+                            )}
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
