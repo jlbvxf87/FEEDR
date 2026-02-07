@@ -33,7 +33,7 @@ export class ClaudeScriptService implements ScriptService {
   }
 
   async generateScript(params: ScriptGenerationParams): Promise<ScriptOutput> {
-    const { intent_text, preset_key, mode, variant_index, batch_size, research_context, target_duration_sec } = params;
+    const { intent_text, preset_key, mode, variant_index, batch_size, research_context, target_duration_sec, structured_prompt } = params;
     
     // Build research section if available from Apify scraping
     let researchSection = "";
@@ -66,6 +66,11 @@ CONTENT REQUIREMENTS:
 ${research_context?.trend_analysis?.recommended_hooks ? `- Inspired by these proven hooks: ${research_context.trend_analysis.recommended_hooks.slice(0, 2).map(h => `"${h.hook}"`).join(", ")}` : ''}
 - Script MUST be ${scriptConstraints.minWords}-${scriptConstraints.maxWords} words (this is CRITICAL - count carefully!)
 - Include 4-5 on-screen text overlays (timestamps 0-${overlayMaxStart} seconds only)
+
+${structured_prompt ? `
+STRUCTURED CONTEXT (JSON):
+${JSON.stringify(structured_prompt, null, 2)}
+` : ''}
 
 Return ONLY valid JSON with this exact structure:
 {

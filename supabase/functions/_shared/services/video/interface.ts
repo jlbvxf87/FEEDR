@@ -16,6 +16,11 @@ export interface VideoGenerationParams {
   method?: string; // Content method for enhanced visual direction
   platform?: string; // Target platform for optimized output
   quality?: "standard" | "hd"; // Quality tier
+  generation_mode?: "ttv" | "i2v";
+  reference_images?: {
+    product_url?: string;
+    person_url?: string;
+  };
 }
 
 // =============================================================================

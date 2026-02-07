@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, Suspense, useMemo, useRef } from "rea
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseBrowser";
-import type { Preset, Batch, Clip, PresetKey, BatchMode, BatchSize, OutputType, BatchStatus, ClipStatus } from "@/lib/types";
+import type { Preset, Batch, Clip, PresetKey, BatchMode, BatchSize, OutputType, BatchStatus, ClipStatus, AdFormat, OutcomeGoal, SceneCount, ComplianceFlag } from "@/lib/types";
 import { ImagePack, IMAGE_PACKS, generateImagePrompts } from "@/lib/imagePresets";
 import { QualityMode, estimateBatchCost, formatCost, analyzeComplexity, QUALITY_TIERS } from "@/lib/costs";
 import { ImagePackSelector } from "@/components/ImagePackSelector";
@@ -53,6 +53,14 @@ function FeedPageContent() {
   // Quality mode - user controls which models to use
   const [qualityMode, setQualityMode] = useState<QualityMode>("good");
   const [videoService, setVideoService] = useState<"sora" | "kling">("sora");
+  const [adFormat, setAdFormat] = useState<AdFormat>("ugc_testimonial");
+  const [outcomeGoal, setOutcomeGoal] = useState<OutcomeGoal>("conversion");
+  const [sceneCount, setSceneCount] = useState<SceneCount>(4);
+  const [complianceFlags, setComplianceFlags] = useState<ComplianceFlag[]>([]);
+  const [useReferenceImages, setUseReferenceImages] = useState(false);
+  const [productRefUrl, setProductRefUrl] = useState<string | null>(null);
+  const [personRefUrl, setPersonRefUrl] = useState<string | null>(null);
+  const [uploadingRefs, setUploadingRefs] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   
@@ -60,6 +68,26 @@ function FeedPageContent() {
   const [totalSpent, setTotalSpent] = useState(0);
   const [sessionCost, setSessionCost] = useState(0);
   const [balanceCents, setBalanceCents] = useState<number | null>(null);
+
+  const adFormatOptions: Array<{ value: AdFormat; label: string }> = [
+    { value: "ugc_testimonial", label: "UGC Testimonial" },
+    { value: "problem_solution", label: "Problem → Solution" },
+    { value: "before_after", label: "Before / After" },
+    { value: "founder_pov", label: "Founder POV" },
+    { value: "product_demo", label: "Product Demo" },
+  ];
+
+  const outcomeOptions: Array<{ value: OutcomeGoal; label: string }> = [
+    { value: "conversion", label: "Conversion" },
+    { value: "awareness", label: "Awareness" },
+    { value: "retention", label: "Retention" },
+  ];
+
+  const complianceOptions: Array<{ value: ComplianceFlag; label: string }> = [
+    { value: "no_medical_claims", label: "No medical claims" },
+    { value: "no_medication_shown", label: "No medication shown" },
+    { value: "no_exaggerated_results", label: "No exaggerated results" },
+  ];
 
   const supabase = createClient();
 
@@ -104,8 +132,37 @@ function FeedPageContent() {
     const baseSeconds = 45 + 10 + 12 + 15; // research + script + voice + merge
     const videoSeconds = videoService === "kling" ? 240 : 360;
     const batchPenalty = batchSize <= 2 ? 1 : 1 + (batchSize - 2) * 0.1;
-    return Math.ceil(((baseSeconds + videoSeconds) * batchPenalty) / 60);
-  }, [outputType, videoService, videoBatchSize, imageBatchSize]);
+    const i2vPenalty = useReferenceImages ? 1.1 : 1;
+    return Math.ceil(((baseSeconds + videoSeconds) * batchPenalty * i2vPenalty) / 60);
+  }, [outputType, videoService, videoBatchSize, imageBatchSize, useReferenceImages]);
+
+  const toggleCompliance = useCallback((flag: ComplianceFlag) => {
+    setComplianceFlags((prev) =>
+      prev.includes(flag) ? prev.filter((f) => f !== flag) : [...prev, flag]
+    );
+  }, []);
+
+  const uploadReferenceImage = useCallback(async (file: File, kind: "product" | "person") => {
+    if (!file) return;
+    setUploadingRefs(true);
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `references/${userId || "anon"}/${kind}_${Date.now()}_${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("images")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from("images").getPublicUrl(path);
+      if (kind === "product") setProductRefUrl(data.publicUrl);
+      if (kind === "person") setPersonRefUrl(data.publicUrl);
+    } catch (err) {
+      console.error("Reference upload failed:", err);
+      setError("Failed to upload reference image. Try a smaller file.");
+    } finally {
+      setUploadingRefs(false);
+    }
+  }, [supabase, userId]);
 
   // Load initial data
   useEffect(() => {
@@ -260,6 +317,11 @@ function FeedPageContent() {
     try {
       const mode: BatchMode = "hook_test";
       const batchSize = outputType === "image" ? imageBatchSize : videoBatchSize;
+      if (outputType === "video" && useReferenceImages) {
+        if (!productRefUrl || !personRefUrl) {
+          throw new Error("Please upload both product and person reference images to use Image‑to‑Video.");
+        }
+      }
       
       const imagePrompts = outputType === "image" 
         ? generateImagePrompts(intentText.trim(), imagePack)
@@ -277,6 +339,14 @@ function FeedPageContent() {
           quality_mode: estimatedCost.mode,
           estimated_cost: estimatedCost.totalCents,
           video_service: outputType === "video" ? videoService : undefined,
+          ad_format: outputType === "video" ? adFormat : undefined,
+          outcome_goal: outputType === "video" ? outcomeGoal : undefined,
+          scene_count: outputType === "video" ? sceneCount : undefined,
+          compliance: outputType === "video" ? complianceFlags : undefined,
+          video_generation_mode: outputType === "video" && useReferenceImages ? "i2v" : "ttv",
+          reference_images: outputType === "video" && useReferenceImages
+            ? { product_url: productRefUrl || undefined, person_url: personRefUrl || undefined }
+            : undefined,
         },
       });
 
@@ -319,7 +389,7 @@ function FeedPageContent() {
       setError(err instanceof Error ? err.message : "Something broke. Try again.");
       setIsGenerating(false);
     }
-  }, [intentText, selectedPreset, outputType, imagePack, estimatedCost, isGenerating, videoService]);
+  }, [intentText, selectedPreset, outputType, imagePack, estimatedCost, isGenerating, videoService, adFormat, outcomeGoal, sceneCount, complianceFlags, useReferenceImages, productRefUrl, personRefUrl, imageBatchSize, videoBatchSize]);
 
   const handleToggleWinner = useCallback(async (clipId: string, winner: boolean) => {
     await supabase.from("clips").update({ winner }).eq("id", clipId);
@@ -583,6 +653,144 @@ function FeedPageContent() {
                       {service === "sora" ? "Sora 2" : "Kling 2.6"}
                     </button>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {outputType === "video" && (
+              <div className="space-y-3 pt-2 border-t border-[#1C2230]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[#6B7A8F]">Ad Format</span>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {adFormatOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setAdFormat(opt.value)}
+                        className={cn(
+                          "px-3 h-7 rounded-full text-xs font-semibold transition-all",
+                          adFormat === opt.value
+                            ? "bg-[#2EE6C9] text-[#0B0E11]"
+                            : "bg-[#0B0E11] text-[#6B7A8F] hover:text-white"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[#6B7A8F]">Outcome</span>
+                  <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
+                    {outcomeOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setOutcomeGoal(opt.value)}
+                        className={cn(
+                          "px-4 h-7 rounded-full text-xs font-semibold transition-all",
+                          outcomeGoal === opt.value
+                            ? "bg-[#2EE6C9] text-[#0B0E11]"
+                            : "text-[#6B7A8F] hover:text-white"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[#6B7A8F]">Scenes</span>
+                  <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
+                    {([3, 4, 5] as const).map((count) => (
+                      <button
+                        key={count}
+                        onClick={() => setSceneCount(count)}
+                        className={cn(
+                          "w-9 h-7 rounded-full text-xs font-semibold transition-all",
+                          sceneCount === count
+                            ? "bg-[#2EE6C9] text-[#0B0E11]"
+                            : "text-[#6B7A8F] hover:text-white"
+                        )}
+                      >
+                        {count}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-xs text-[#6B7A8F]">Compliance</span>
+                  <div className="flex flex-wrap gap-2">
+                    {complianceOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => toggleCompliance(opt.value)}
+                        className={cn(
+                          "px-3 h-7 rounded-full text-xs font-semibold transition-all border",
+                          complianceFlags.includes(opt.value)
+                            ? "bg-[#F59E0B]/20 text-[#F59E0B] border-[#F59E0B]/40"
+                            : "bg-[#0B0E11] text-[#6B7A8F] border-[#1C2230] hover:text-white"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-[#1C2230]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-[#6B7A8F]">Reference Images (I2V)</span>
+                    <button
+                      onClick={() => setUseReferenceImages((prev) => !prev)}
+                      className={cn(
+                        "px-3 h-7 rounded-full text-xs font-semibold transition-all",
+                        useReferenceImages
+                          ? "bg-[#2EE6C9] text-[#0B0E11]"
+                          : "bg-[#0B0E11] text-[#6B7A8F] hover:text-white"
+                      )}
+                    >
+                      {useReferenceImages ? "On" : "Off"}
+                    </button>
+                  </div>
+
+                  {useReferenceImages && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="flex flex-col gap-2 text-xs text-[#6B7A8F]">
+                        Product Image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={uploadingRefs}
+                          onChange={(e) => {
+                            const file = e.currentTarget.files?.[0];
+                            if (file) uploadReferenceImage(file, "product");
+                          }}
+                          className="text-[11px] text-[#9CA3AF]"
+                        />
+                        {productRefUrl && (
+                          <img src={productRefUrl} alt="Product reference" className="h-16 w-full object-cover rounded-md border border-[#1C2230]" />
+                        )}
+                      </label>
+                      <label className="flex flex-col gap-2 text-xs text-[#6B7A8F]">
+                        Person Image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={uploadingRefs}
+                          onChange={(e) => {
+                            const file = e.currentTarget.files?.[0];
+                            if (file) uploadReferenceImage(file, "person");
+                          }}
+                          className="text-[11px] text-[#9CA3AF]"
+                        />
+                        {personRefUrl && (
+                          <img src={personRefUrl} alt="Person reference" className="h-16 w-full object-cover rounded-md border border-[#1C2230]" />
+                        )}
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

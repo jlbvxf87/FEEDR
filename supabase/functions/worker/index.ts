@@ -565,6 +565,9 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
       await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "video", {
         duration_seconds: job.payload_json?.target_duration_sec || 15,
         video_service: job.payload_json?.video_service,
+        aspect_ratio: job.payload_json?.aspect_ratio || "9:16",
+        video_generation_mode: job.payload_json?.video_generation_mode,
+        reference_images: job.payload_json?.reference_images,
       });
       continue;
     }
@@ -584,6 +587,7 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
         mode,
         variant_index: i,
         batch_size: clips.length,
+        structured_prompt: job.payload_json?.structured_prompt,
         research_context: research_context || undefined,
         target_duration_sec: job.payload_json?.target_duration_sec,
       }),
@@ -618,6 +622,9 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
     await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "video", {
       duration_seconds: job.payload_json?.target_duration_sec || 15,
       video_service: job.payload_json?.video_service,
+      aspect_ratio: job.payload_json?.aspect_ratio || "9:16",
+      video_generation_mode: job.payload_json?.video_generation_mode,
+      reference_images: job.payload_json?.reference_images,
     });
   }
   
@@ -926,12 +933,18 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
       let taskId: string;
       let effectiveService = requestedService;
 
+      const aspectRatio = (job.payload_json?.aspect_ratio as string) || "9:16";
+      const referenceImages = job.payload_json?.reference_images as { product_url?: string; person_url?: string } | undefined;
+      const generationMode = job.payload_json?.video_generation_mode as "ttv" | "i2v" | undefined;
+
       try {
         taskId = await videoService.submitVideo({
           prompt: finalPrompt,
           clip_id: job.clip_id,
           duration: duration_seconds,
-          aspect_ratio: "9:16",
+          aspect_ratio: aspectRatio as any,
+          reference_images: referenceImages,
+          generation_mode: generationMode,
         });
       } catch (err: any) {
         const msg = err?.message || "";
@@ -949,7 +962,9 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
             prompt: finalPrompt,
             clip_id: job.clip_id,
             duration: duration_seconds,
-            aspect_ratio: "9:16",
+            aspect_ratio: aspectRatio as any,
+            reference_images: referenceImages,
+            generation_mode: generationMode,
           });
           effectiveService = "kling";
         } else {
@@ -1000,7 +1015,9 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
           prompt: finalPrompt,
           clip_id: job.clip_id,
           duration: duration_seconds,
-          aspect_ratio: "9:16",
+          aspect_ratio: ((job.payload_json?.aspect_ratio as string) || "9:16") as any,
+          reference_images: (job.payload_json?.reference_images as { product_url?: string; person_url?: string } | undefined),
+          generation_mode: (job.payload_json?.video_generation_mode as "ttv" | "i2v" | undefined),
         }),
         45000,
         "Video generation"

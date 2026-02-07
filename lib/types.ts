@@ -27,6 +27,10 @@ export type BatchSize = 2 | 4 | 6 | 8;
 export type BatchStatus = "queued" | "researching" | "running" | "done" | "failed" | "cancelled";
 export type OutputType = "video" | "image";
 export type ImageType = "product" | "lifestyle" | "ad" | "ugc" | "hero" | "custom";
+export type AdFormat = "ugc_testimonial" | "problem_solution" | "before_after" | "founder_pov" | "product_demo";
+export type OutcomeGoal = "conversion" | "awareness" | "retention";
+export type ComplianceFlag = "no_medical_claims" | "no_medication_shown" | "no_exaggerated_results";
+export type SceneCount = 3 | 4 | 5;
 
 export type ClipStatus =
   | "planned"
@@ -180,6 +184,15 @@ export interface GenerateBatchRequest {
   image_type?: ImageType;
   aspect_ratio?: string;
   video_service?: "sora" | "kling";
+  ad_format?: AdFormat;
+  outcome_goal?: OutcomeGoal;
+  scene_count?: SceneCount;
+  compliance?: ComplianceFlag[];
+  video_generation_mode?: "ttv" | "i2v";
+  reference_images?: {
+    product_url?: string;
+    person_url?: string;
+  };
 }
 
 export interface GenerateBatchResponse {

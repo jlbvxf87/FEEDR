@@ -74,6 +74,17 @@ export interface StructuredPrompt {
     test_mode: string;
     target_duration_sec: number;
   };
+
+  // Optional high-level directives
+  ad_format?: string;
+  outcome_goal?: string;
+  scene_count?: number;
+  compliance?: string[];
+  reference_images?: {
+    product_url?: string;
+    person_url?: string;
+  };
+  video_generation_mode?: "ttv" | "i2v";
 }
 
 export interface ScriptService {

@@ -28,12 +28,15 @@ export class SoraVideoService implements VideoService {
    * Uses the unified jobs API: POST /api/v1/jobs/createTask
    */
   async submitVideo(params: VideoGenerationParams): Promise<string> {
-    const { prompt, duration = 15, aspect_ratio = "9:16" } = params;
+    const { prompt, duration = 15, aspect_ratio = "9:16", generation_mode, reference_images } = params;
 
     const kieAspectRatio = aspect_ratio === "9:16" ? "portrait" : "landscape";
     const nFrames = duration <= 10 ? "10" : "15";
+    const imageUrls = [reference_images?.product_url, reference_images?.person_url].filter(Boolean) as string[];
+    const useI2V = generation_mode === "i2v" && imageUrls.length > 0;
+    const model = useI2V ? "sora-2-pro-image-to-video" : "sora-2-pro-text-to-video";
 
-    console.log(`[Sora Submit] Submitting to KIE.AI: ${prompt.substring(0, 50)}...`);
+    console.log(`[Sora Submit] Submitting to KIE.AI (${useI2V ? "I2V" : "TTV"}): ${prompt.substring(0, 50)}...`);
 
     const submitResponse = await fetch(`${KIE_API_BASE}/jobs/createTask`, {
       method: "POST",
@@ -42,13 +45,14 @@ export class SoraVideoService implements VideoService {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "sora-2-pro-text-to-video",
+        model,
         input: {
           prompt,
           aspect_ratio: kieAspectRatio,
           n_frames: nFrames,
-          size: "high",
+          size: useI2V ? "standard" : "high",
           remove_watermark: true,
+          ...(useI2V ? { image_urls: imageUrls } : {}),
         },
       }),
     });
@@ -96,13 +100,16 @@ export class SoraVideoService implements VideoService {
    * Fallback path — the async submit+poll in the worker is preferred.
    */
   async generateVideo(params: VideoGenerationParams): Promise<VideoOutput> {
-    const { prompt, clip_id, duration = 15, aspect_ratio = "9:16" } = params;
+    const { prompt, clip_id, duration = 15, aspect_ratio = "9:16", generation_mode, reference_images } = params;
 
     try {
       const kieAspectRatio = aspect_ratio === "9:16" ? "portrait" : "landscape";
       const nFrames = duration <= 10 ? "10" : "15";
+      const imageUrls = [reference_images?.product_url, reference_images?.person_url].filter(Boolean) as string[];
+      const useI2V = generation_mode === "i2v" && imageUrls.length > 0;
+      const model = useI2V ? "sora-2-pro-image-to-video" : "sora-2-pro-text-to-video";
 
-      console.log(`Submitting to KIE.AI Sora 2 Pro: ${prompt.substring(0, 50)}...`);
+      console.log(`Submitting to KIE.AI Sora 2 Pro (${useI2V ? "I2V" : "TTV"}): ${prompt.substring(0, 50)}...`);
 
       // 1. Submit via unified jobs API
       const submitResponse = await fetch(`${KIE_API_BASE}/jobs/createTask`, {
@@ -112,13 +119,14 @@ export class SoraVideoService implements VideoService {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "sora-2-pro-text-to-video",
+          model,
           input: {
             prompt,
             aspect_ratio: kieAspectRatio,
             n_frames: nFrames,
-            size: "high",
+            size: useI2V ? "standard" : "high",
             remove_watermark: true,
+            ...(useI2V ? { image_urls: imageUrls } : {}),
           },
         }),
       });

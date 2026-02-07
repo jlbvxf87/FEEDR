@@ -22,7 +22,21 @@ export class KlingVideoService implements VideoService {
   }
 
   async submitVideo(params: VideoGenerationParams): Promise<string> {
-    const { prompt, duration = 5, aspect_ratio = "9:16" } = params;
+    const { prompt, duration = 5, aspect_ratio = "9:16", generation_mode, reference_images } = params;
+    const imageUrls = [reference_images?.product_url, reference_images?.person_url].filter(Boolean) as string[];
+    const useI2V = generation_mode === "i2v" && imageUrls.length > 0;
+
+    const input: Record<string, unknown> = {
+      prompt,
+      sound: false,
+      duration: String(Math.min(duration, this.maxDuration)),
+    };
+    if (!useI2V) {
+      input.aspect_ratio = aspect_ratio;
+    }
+    if (useI2V) {
+      input.image_urls = imageUrls;
+    }
 
     const submitResponse = await fetch(`${KIE_API_BASE}/jobs/createTask`, {
       method: "POST",
@@ -31,13 +45,8 @@ export class KlingVideoService implements VideoService {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "kling-2.6/text-to-video",
-        input: {
-          prompt,
-          sound: false,
-          aspect_ratio,
-          duration: String(Math.min(duration, this.maxDuration)),
-        },
+        model: useI2V ? "kling-2.6/image-to-video" : "kling-2.6/text-to-video",
+        input,
       }),
     });
 

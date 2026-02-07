@@ -34,6 +34,17 @@ interface GenerateBatchRequest {
   estimated_cost?: number; // User charge in cents (already includes upsell)
   // Video service override
   video_service?: "sora" | "kling";
+  // High-level ad options
+  ad_format?: string;
+  outcome_goal?: string;
+  scene_count?: number;
+  compliance?: string[];
+  // Image-to-video options
+  video_generation_mode?: "ttv" | "i2v";
+  reference_images?: {
+    product_url?: string;
+    person_url?: string;
+  };
 }
 
 // =============================================================================
@@ -163,7 +174,15 @@ function buildStructuredPrompt(
   mode: string,
   variantIndex: number,
   batchSize: number,
-  targetDurationSec: number
+  targetDurationSec: number,
+  options?: {
+    ad_format?: string;
+    outcome_goal?: string;
+    scene_count?: number;
+    compliance?: string[];
+    video_generation_mode?: "ttv" | "i2v";
+    reference_images?: { product_url?: string; person_url?: string };
+  }
 ): object {
   const config = METHOD_CONFIGS[method] || METHOD_CONFIGS.FOUNDERS;
   
@@ -186,7 +205,13 @@ function buildStructuredPrompt(
       total_variants: batchSize,
       test_mode: mode,
       target_duration_sec: targetDurationSec
-    }
+    },
+    ad_format: options?.ad_format,
+    outcome_goal: options?.outcome_goal,
+    scene_count: options?.scene_count,
+    compliance: options?.compliance,
+    video_generation_mode: options?.video_generation_mode,
+    reference_images: options?.reference_images
   };
 }
 
@@ -265,6 +290,12 @@ serve(async (req) => {
       quality_mode = "good",
       estimated_cost = 0,
       video_service,
+      ad_format,
+      outcome_goal,
+      scene_count,
+      compliance,
+      video_generation_mode,
+      reference_images,
     } = body;
 
     const targetDurationSec =
@@ -302,6 +333,15 @@ serve(async (req) => {
         JSON.stringify({ error: "Invalid output_type" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    if (output_type === "video" && video_generation_mode === "i2v") {
+      if (!reference_images?.product_url || !reference_images?.person_url) {
+        return new Response(
+          JSON.stringify({ error: "Both product and person reference images are required for Image-to-Video." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Resolve preset for AUTO
@@ -449,7 +489,15 @@ serve(async (req) => {
         mode,
         0, // Will be updated per variant in worker
         batch_size,
-        targetDurationSec
+        targetDurationSec,
+        {
+          ad_format,
+          outcome_goal,
+          scene_count,
+          compliance,
+          video_generation_mode,
+          reference_images,
+        }
       );
       
       // Check if research is enabled (Apify token present)
@@ -475,6 +523,12 @@ serve(async (req) => {
             image_pack,
             video_service,
             target_duration_sec: targetDurationSec,
+            ad_format,
+            outcome_goal,
+            scene_count,
+            compliance,
+            video_generation_mode,
+            reference_images,
             // Structured prompt for worker
             structured_prompt: structuredPrompt,
           },
