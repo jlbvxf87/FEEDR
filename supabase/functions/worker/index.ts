@@ -519,10 +519,12 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
       generatedScripts.push(clip.script_spoken);
       // Still ensure TTS and video jobs exist (parallel pipeline)
       await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "tts", {
-        script: clip.script_spoken
+        script: clip.script_spoken,
+        video_service: job.payload_json?.video_service,
       });
       await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "video", {
         duration_seconds: 15,
+        video_service: job.payload_json?.video_service,
       });
       continue;
     }
@@ -570,9 +572,11 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
     // This lets TTS and Video run in parallel — saves 5-10s off total time.
     await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "tts", {
       script: script_spoken,
+      video_service: job.payload_json?.video_service,
     });
     await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "video", {
       duration_seconds: 15,
+      video_service: job.payload_json?.video_service,
     });
   }
   
@@ -667,7 +671,10 @@ async function handleTtsJob(supabase: any, job: any, services: ReturnType<typeof
 // Handle video job - generates raw video using AI service
 // Uses async submit+poll pattern: submits to Sora, re-queues job, polls on next invocation
 async function handleVideoJob(supabase: any, job: any, services: ReturnType<typeof getServices>) {
-  const videoService = services.getVideoService();
+  const requestedService = (job.payload_json?.video_service as string) || Deno.env.get("VIDEO_SERVICE") || "sora";
+  const videoService = services.getVideoServiceByName(
+    (requestedService === "kling" ? "kling" : "sora") as any
+  );
 
   // Get clip details including script for quality check
   const { data: clip, error: clipError } = await supabase
@@ -875,14 +882,41 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
     // Check if the service supports async submit
     if (videoService.submitVideo) {
       // ASYNC PATH: Submit and re-queue for polling
-      const taskId = await videoService.submitVideo({
-        prompt: finalPrompt,
-        clip_id: job.clip_id,
-        duration: duration_seconds,
-        aspect_ratio: "9:16",
-      });
+      let taskId: string;
+      let effectiveService = requestedService;
 
-      console.log(`[Video Submit] Sora task submitted: ${taskId}`);
+      try {
+        taskId = await videoService.submitVideo({
+          prompt: finalPrompt,
+          clip_id: job.clip_id,
+          duration: duration_seconds,
+          aspect_ratio: "9:16",
+        });
+      } catch (err: any) {
+        const msg = err?.message || "";
+        const isAccessError =
+          msg.includes("access permissions") ||
+          msg.includes("401") ||
+          msg.includes("\"code\":401") ||
+          msg.includes("Credits insufficient") ||
+          msg.includes("code\":402");
+
+        if (requestedService === "sora" && isAccessError) {
+          console.warn(`[Video Submit] Sora access/credits error detected, falling back to Kling`);
+          const fallback = services.getVideoServiceByName("kling" as any);
+          taskId = await fallback.submitVideo!({
+            prompt: finalPrompt,
+            clip_id: job.clip_id,
+            duration: duration_seconds,
+            aspect_ratio: "9:16",
+          });
+          effectiveService = "kling";
+        } else {
+          throw err;
+        }
+      }
+
+      console.log(`[Video Submit] ${effectiveService} task submitted: ${taskId}`);
 
       // CRITICAL: Save task_id to clip record FIRST (durable, survives job crashes)
       // This prevents duplicate Sora submissions ($0.50 each) if job payload is lost
@@ -896,6 +930,7 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
         ...job.payload_json,
         sora_task_id: taskId,
         sora_submitted_at: Date.now(),
+        video_service: effectiveService,
       };
 
       await safeRpc(supabase, "complete_job", {

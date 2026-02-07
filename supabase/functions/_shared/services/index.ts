@@ -15,6 +15,7 @@ import { ClaudeScriptService } from "./script/claude.ts";
 import { ElevenLabsVoiceService } from "./voice/elevenlabs.ts";
 import { OpenAITTSService } from "./voice/openai-tts.ts";
 import { SoraVideoService } from "./video/sora.ts";
+import { KlingVideoService } from "./video/kling.ts";
 import { ApifyResearchService } from "./research/apify.ts";
 import { ShotstackAssemblyService } from "./assembly/shotstack.ts";
 import { DalleImageService } from "./image/dalle.ts";
@@ -25,7 +26,7 @@ export type ServiceType = "script" | "voice" | "video" | "image" | "assembly" | 
 // Available service implementations
 export type ScriptServiceName = "openai" | "claude";
 export type VoiceServiceName = "elevenlabs" | "openai";
-export type VideoServiceName = "sora";
+export type VideoServiceName = "sora" | "kling";
 export type ImageServiceName = "dalle";
 export type AssemblyServiceName = "shotstack";
 export type ResearchServiceName = "apify";
@@ -87,6 +88,13 @@ export class ServiceRegistry {
       this.videoService = this.createVideoService(serviceName as VideoServiceName);
     }
     return this.videoService;
+  }
+
+  /**
+   * Get a specific video service by name (no caching)
+   */
+  getVideoServiceByName(name: VideoServiceName): VideoService {
+    return this.createVideoService(name);
   }
 
   /**
@@ -161,8 +169,14 @@ export class ServiceRegistry {
     }
   }
 
-  private createVideoService(_name: VideoServiceName): VideoService {
-    return new SoraVideoService();
+  private createVideoService(name: VideoServiceName): VideoService {
+    switch (name) {
+      case "kling":
+        return new KlingVideoService();
+      case "sora":
+      default:
+        return new SoraVideoService();
+    }
   }
 
   private createImageService(_name: ImageServiceName): ImageService {

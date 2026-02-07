@@ -179,6 +179,7 @@ export interface GenerateBatchRequest {
   output_type?: OutputType;
   image_type?: ImageType;
   aspect_ratio?: string;
+  video_service?: "sora" | "kling";
 }
 
 export interface GenerateBatchResponse {

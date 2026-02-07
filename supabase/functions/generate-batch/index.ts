@@ -32,6 +32,8 @@ interface GenerateBatchRequest {
   // Billing fields
   quality_mode?: QualityMode;
   estimated_cost?: number; // User charge in cents (already includes upsell)
+  // Video service override
+  video_service?: "sora" | "kling";
 }
 
 // =============================================================================
@@ -261,6 +263,7 @@ serve(async (req) => {
       image_prompts,
       quality_mode = "good",
       estimated_cost = 0,
+      video_service,
     } = body;
     
     // Calculate costs
@@ -465,6 +468,7 @@ serve(async (req) => {
             image_type,
             aspect_ratio,
             image_pack,
+            video_service,
             // Structured prompt for worker
             structured_prompt: structuredPrompt,
           },

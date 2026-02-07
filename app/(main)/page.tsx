@@ -52,6 +52,7 @@ function FeedPageContent() {
   
   // Quality mode - user controls which models to use
   const [qualityMode, setQualityMode] = useState<QualityMode>("good");
+  const [videoService, setVideoService] = useState<"sora" | "kling">("sora");
   
   // Cost tracking
   const [totalSpent, setTotalSpent] = useState(0);
@@ -237,6 +238,7 @@ function FeedPageContent() {
           image_prompts: imagePrompts,
           quality_mode: estimatedCost.mode,
           estimated_cost: estimatedCost.totalCents,
+          video_service: outputType === "video" ? videoService : undefined,
         },
       });
 
@@ -279,7 +281,7 @@ function FeedPageContent() {
       setError(err instanceof Error ? err.message : "Something broke. Try again.");
       setIsGenerating(false);
     }
-  }, [intentText, selectedPreset, outputType, imagePack, estimatedCost, isGenerating]);
+  }, [intentText, selectedPreset, outputType, imagePack, estimatedCost, isGenerating, videoService]);
 
   const handleToggleWinner = useCallback(async (clipId: string, winner: boolean) => {
     await supabase.from("clips").update({ winner }).eq("id", clipId);
@@ -522,6 +524,30 @@ function FeedPageContent() {
                 ))}
               </div>
             </div>
+
+            {/* Row 2.5: Video service selector (dev only) */}
+            {isDevMode && outputType === "video" && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-[#6B7A8F]">Video Service</span>
+                <div className="flex items-center bg-[#0B0E11] rounded-full p-1">
+                  {(["sora", "kling"] as const).map((service) => (
+                    <button
+                      key={service}
+                      onClick={() => setVideoService(service)}
+                      disabled={isGenerating || isRunning}
+                      className={cn(
+                        "px-4 h-8 rounded-full text-sm font-semibold transition-all",
+                        videoService === service
+                          ? "bg-[#2EE6C9] text-[#0B0E11]"
+                          : "text-[#6B7A8F] hover:text-white"
+                      )}
+                    >
+                      {service === "sora" ? "Sora 2" : "Kling 2.6"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Row 3: Cost estimate with info tooltip */}
             <div className="flex items-center justify-between pt-2 border-t border-[#1C2230]">
