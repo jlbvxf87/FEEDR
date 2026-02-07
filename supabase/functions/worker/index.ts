@@ -523,7 +523,7 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
         video_service: job.payload_json?.video_service,
       });
       await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "video", {
-        duration_seconds: 15,
+        duration_seconds: job.payload_json?.target_duration_sec || 15,
         video_service: job.payload_json?.video_service,
       });
       continue;
@@ -545,6 +545,7 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
         variant_index: i,
         batch_size: clips.length,
         research_context: research_context || undefined,
+        target_duration_sec: job.payload_json?.target_duration_sec,
       }),
       30000, // 30s timeout for script generation
       "Script generation"
@@ -575,7 +576,7 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
       video_service: job.payload_json?.video_service,
     });
     await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "video", {
-      duration_seconds: 15,
+      duration_seconds: job.payload_json?.target_duration_sec || 15,
       video_service: job.payload_json?.video_service,
     });
   }

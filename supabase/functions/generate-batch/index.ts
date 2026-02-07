@@ -162,7 +162,8 @@ function buildStructuredPrompt(
   method: string,
   mode: string,
   variantIndex: number,
-  batchSize: number
+  batchSize: number,
+  targetDurationSec: number
 ): object {
   const config = METHOD_CONFIGS[method] || METHOD_CONFIGS.FOUNDERS;
   
@@ -184,7 +185,7 @@ function buildStructuredPrompt(
       variant_number: variantIndex + 1,
       total_variants: batchSize,
       test_mode: mode,
-      target_duration_sec: 20 // Default target
+      target_duration_sec: targetDurationSec
     }
   };
 }
@@ -265,6 +266,9 @@ serve(async (req) => {
       estimated_cost = 0,
       video_service,
     } = body;
+
+    const targetDurationSec =
+      output_type === "video" && video_service === "kling" ? 10 : 15;
     
     // Calculate costs
     // estimated_cost from frontend is already the user charge (includes upsell)
@@ -444,7 +448,8 @@ serve(async (req) => {
         resolvedPreset,
         mode,
         0, // Will be updated per variant in worker
-        batch_size
+        batch_size,
+        targetDurationSec
       );
       
       // Check if research is enabled (Apify token present)
@@ -469,6 +474,7 @@ serve(async (req) => {
             aspect_ratio,
             image_pack,
             video_service,
+            target_duration_sec: targetDurationSec,
             // Structured prompt for worker
             structured_prompt: structuredPrompt,
           },

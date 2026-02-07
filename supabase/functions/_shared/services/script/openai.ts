@@ -11,9 +11,9 @@ import {
 } from "./interface.ts";
 import {
   getScriptPromptConstraints,
+  getScriptConstraintsForDuration,
   validateScriptTiming,
   validateOverlayTiming,
-  SCRIPT_CONSTRAINTS,
   VIDEO_DURATION,
 } from "../../timing.ts";
 import { validateSoraPrompt, enhanceSoraPrompt } from "../../quality.ts";
@@ -35,7 +35,7 @@ export class OpenAIScriptService implements ScriptService {
   }
 
   async generateScript(params: ScriptGenerationParams): Promise<ScriptOutput> {
-    const { intent_text, preset_key, mode, variant_index, batch_size, structured_prompt, research_context } = params;
+    const { intent_text, preset_key, mode, variant_index, batch_size, structured_prompt, research_context, target_duration_sec } = params;
     
     // Get method-specific prompts (fallback to FOUNDERS as default)
     const methodPrompt = METHOD_SCRIPT_PROMPTS[preset_key] || METHOD_SCRIPT_PROMPTS.FOUNDERS;
@@ -56,7 +56,10 @@ IMPORTANT: Use these real patterns and hooks as inspiration. The top performers 
     }
     
     // Get timing constraints
-    const timingConstraints = getScriptPromptConstraints();
+    const targetDuration = target_duration_sec || VIDEO_DURATION.TARGET;
+    const timingConstraints = getScriptPromptConstraints(targetDuration);
+    const scriptConstraints = getScriptConstraintsForDuration(targetDuration);
+    const overlayMaxStart = Math.max(6, targetDuration - 3);
     
     // Build the user prompt with rich method guidance + research
     const userPrompt = `Generate variant ${variant_index + 1} of ${batch_size} for a short-form video.
@@ -80,8 +83,8 @@ VARIANT REQUIREMENTS:
 - Use a unique hook approach that still follows the method's formula
 ${research_context?.trend_analysis?.recommended_hooks ? `- Consider these proven hook styles from research: ${research_context.trend_analysis.recommended_hooks.slice(0, 2).map(h => `"${h.hook}"`).join(", ")}` : ''}
 - Test mode: ${mode}
-- SCRIPT MUST BE 30-38 WORDS (count them!)
-- Include 4-5 on-screen text overlays (timestamps 0-12 seconds only)
+- SCRIPT MUST BE ${scriptConstraints.minWords}-${scriptConstraints.maxWords} WORDS (count them!)
+- Include 4-5 on-screen text overlays (timestamps 0-${overlayMaxStart} seconds only)
 
 ${structured_prompt ? `
 STRUCTURED CONTEXT (JSON):
@@ -146,10 +149,10 @@ Return ONLY valid JSON:
       if (!timing.isValid) {
         console.warn(`[Script] Timing issues: ${timing.issues.join(", ")}`);
         // If script is too long, truncate to safe word count
-        if (timing.wordCount > SCRIPT_CONSTRAINTS.MAX_WORDS) {
+        if (timing.wordCount > scriptConstraints.maxWords) {
           const words = parsed.script_spoken.split(/\s+/);
-          const truncated = words.slice(0, SCRIPT_CONSTRAINTS.TARGET_WORDS).join(" ");
-          console.log(`[Script] Truncated from ${timing.wordCount} to ${SCRIPT_CONSTRAINTS.TARGET_WORDS} words`);
+          const truncated = words.slice(0, scriptConstraints.targetWords).join(" ");
+          console.log(`[Script] Truncated from ${timing.wordCount} to ${scriptConstraints.targetWords} words`);
           parsed.script_spoken = truncated + "...";
         }
       }
@@ -157,7 +160,7 @@ Return ONLY valid JSON:
       // Validate and adjust overlay timing to fit within video duration
       const adjustedOverlays = validateOverlayTiming(
         parsed.on_screen_text_json, 
-        VIDEO_DURATION.TARGET
+        targetDuration
       );
       parsed.on_screen_text_json = adjustedOverlays.map(({ t, text }) => ({ t, text }));
 

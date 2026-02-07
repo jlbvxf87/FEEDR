@@ -8,6 +8,7 @@ interface QualityModeSelectorProps {
   onSelect: (mode: QualityMode) => void;
   outputType: "video" | "image";
   batchSize: number;
+  videoService?: "sora" | "kling";
   disabled?: boolean;
 }
 
@@ -16,12 +17,13 @@ export function QualityModeSelector({
   onSelect,
   outputType,
   batchSize,
+  videoService = "sora",
   disabled = false,
 }: QualityModeSelectorProps) {
   const modes: QualityMode[] = ["fast", "good", "better"];
   
   // Calculate costs for each mode
-  const costs = modes.map(mode => estimateBatchCost(mode, outputType, batchSize));
+  const costs = modes.map(mode => estimateBatchCost(mode, outputType, batchSize, videoService));
   
   return (
     <div className="space-y-3">

@@ -53,6 +53,8 @@ function FeedPageContent() {
   // Quality mode - user controls which models to use
   const [qualityMode, setQualityMode] = useState<QualityMode>("good");
   const [videoService, setVideoService] = useState<"sora" | "kling">("kling");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   
   // Cost tracking
   const [totalSpent, setTotalSpent] = useState(0);
@@ -113,6 +115,20 @@ function FeedPageContent() {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError) throw userError;
         if (!user?.id) return;
+        setUserId(user.id);
+
+        // Load user preferences (video service)
+        const { data: prefs, error: prefsError } = await supabase
+          .from("user_preferences")
+          .select("default_video_service")
+          .eq("user_id", user.id)
+          .single();
+
+        if (!prefsError && prefs?.default_video_service) {
+          const svc = prefs.default_video_service === "sora" ? "sora" : "kling";
+          setVideoService(svc);
+        }
+        setPrefsLoaded(true);
 
         // Load total spent (sum of all batch costs)
         const { data: batchesData } = await supabase
@@ -162,6 +178,20 @@ function FeedPageContent() {
 
     loadData();
   }, []);
+
+  // Persist video service preference
+  useEffect(() => {
+    if (!userId || !prefsLoaded) return;
+    const upsertPref = async () => {
+      await supabase
+        .from("user_preferences")
+        .upsert(
+          { user_id: userId, default_video_service: videoService, updated_at: new Date().toISOString() },
+          { onConflict: "user_id" }
+        );
+    };
+    upsertPref();
+  }, [userId, prefsLoaded, videoService]);
 
   // Poll for updates and trigger worker while batch is running
   useEffect(() => {
@@ -593,15 +623,13 @@ function FeedPageContent() {
                         </span>
                       </div>
                     )}
-                    <div className="flex justify-between">
-                      <span className="text-[#6B7A8F]">{outputType === "video" ? "Video" : "Image"}</span>
-                      <span className="text-white font-medium">
-                        {outputType === "video"
-                          ? "Sora"
-                          : (qualityMode === "fast" ? "DALL-E 2" : qualityMode === "good" ? "DALL-E 3" : "DALL-E 3 HD")
-                        }
-                      </span>
-                    </div>
+                    {outputType === "video" && (
+                      <div className="text-[10px] text-[#6B7A8F]">
+                        {videoService === "kling"
+                          ? "Kling HD: 5s $0.28 / 10s $0.55 (no‑audio)"
+                          : "Sora 2 Pro: 10s $1.00 / 15s $1.50"}
+                      </div>
+                    )}
                   </div>
                   <div className="mt-3 pt-2 border-t border-[#2A3441] text-[10px] text-[#4B5563]">
                     {outputType === "video" ? videoBatchSize : imageBatchSize} {outputType}{(outputType === "video" ? videoBatchSize : imageBatchSize) > 1 ? 's' : ''} × {qualityMode} tier
@@ -622,6 +650,37 @@ function FeedPageContent() {
                 </div>
               </div>
             </div>
+
+            {/* Per-service cost breakdown (per video) */}
+            {outputType === "video" && (
+              <div className="text-xs text-[#6B7A8F] space-y-1 pt-2 border-t border-[#1C2230]">
+                <div className="text-[10px] uppercase tracking-wider text-[#4B5563]">
+                  Per‑Video Breakdown (Base)
+                </div>
+                <div className="flex justify-between">
+                  <span>Script</span>
+                  <span>{formatCost(Math.round(estimatedCost.breakdown.script || 0))}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Voice</span>
+                  <span>{formatCost(Math.round(estimatedCost.breakdown.voice || 0))}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Video</span>
+                  <span>{formatCost(Math.round(estimatedCost.breakdown.video || 0))}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Assembly</span>
+                  <span>{formatCost(Math.round(estimatedCost.breakdown.assembly || 0))}</span>
+                </div>
+                {estimatedCost.breakdown.watermarkRemoval ? (
+                  <div className="flex justify-between">
+                    <span>Watermark</span>
+                    <span>{formatCost(Math.round(estimatedCost.breakdown.watermarkRemoval || 0))}</span>
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             {/* No charge for failures assurance */}
             <p className="text-[10px] text-[#4B5563] text-center pt-1">

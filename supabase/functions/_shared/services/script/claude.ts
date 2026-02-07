@@ -9,9 +9,9 @@ import {
 } from "./interface.ts";
 import {
   getScriptPromptConstraints,
+  getScriptConstraintsForDuration,
   validateScriptTiming,
   validateOverlayTiming,
-  SCRIPT_CONSTRAINTS,
   VIDEO_DURATION,
 } from "../../timing.ts";
 import { validateSoraPrompt, enhanceSoraPrompt } from "../../quality.ts";
@@ -33,7 +33,7 @@ export class ClaudeScriptService implements ScriptService {
   }
 
   async generateScript(params: ScriptGenerationParams): Promise<ScriptOutput> {
-    const { intent_text, preset_key, mode, variant_index, batch_size, research_context } = params;
+    const { intent_text, preset_key, mode, variant_index, batch_size, research_context, target_duration_sec } = params;
     
     // Build research section if available from Apify scraping
     let researchSection = "";
@@ -47,7 +47,10 @@ Use these real patterns as inspiration. The top performers in this niche use the
 `;
     }
     
-    const timingConstraints = getScriptPromptConstraints();
+    const targetDuration = target_duration_sec || VIDEO_DURATION.TARGET;
+    const timingConstraints = getScriptPromptConstraints(targetDuration);
+    const scriptConstraints = getScriptConstraintsForDuration(targetDuration);
+    const overlayMaxStart = Math.max(6, targetDuration - 3);
     
     const userPrompt = `Generate variant ${variant_index + 1} of ${batch_size} for a short-form video.
 
@@ -61,8 +64,8 @@ CONTENT REQUIREMENTS:
 - Each variant should have a DIFFERENT hook approach
 - Variant ${variant_index + 1} should use a unique hook style
 ${research_context?.trend_analysis?.recommended_hooks ? `- Inspired by these proven hooks: ${research_context.trend_analysis.recommended_hooks.slice(0, 2).map(h => `"${h.hook}"`).join(", ")}` : ''}
-- Script MUST be 30-38 words (this is CRITICAL - count carefully!)
-- Include 4-5 on-screen text overlays (timestamps 0-12 seconds only)
+- Script MUST be ${scriptConstraints.minWords}-${scriptConstraints.maxWords} words (this is CRITICAL - count carefully!)
+- Include 4-5 on-screen text overlays (timestamps 0-${overlayMaxStart} seconds only)
 
 Return ONLY valid JSON with this exact structure:
 {
@@ -127,10 +130,10 @@ Return ONLY valid JSON with this exact structure:
       if (!timing.isValid) {
         console.warn(`[Script] Timing issues: ${timing.issues.join(", ")}`);
         // If script is too long, truncate to safe word count
-        if (timing.wordCount > SCRIPT_CONSTRAINTS.MAX_WORDS) {
+        if (timing.wordCount > scriptConstraints.maxWords) {
           const words = parsed.script_spoken.split(/\s+/);
-          const truncated = words.slice(0, SCRIPT_CONSTRAINTS.TARGET_WORDS).join(" ");
-          console.log(`[Script] Truncated from ${timing.wordCount} to ${SCRIPT_CONSTRAINTS.TARGET_WORDS} words`);
+          const truncated = words.slice(0, scriptConstraints.targetWords).join(" ");
+          console.log(`[Script] Truncated from ${timing.wordCount} to ${scriptConstraints.targetWords} words`);
           parsed.script_spoken = truncated + "...";
         }
       }
@@ -138,7 +141,7 @@ Return ONLY valid JSON with this exact structure:
       // Validate and adjust overlay timing to fit within video duration
       const adjustedOverlays = validateOverlayTiming(
         parsed.on_screen_text_json, 
-        VIDEO_DURATION.TARGET
+        targetDuration
       );
       parsed.on_screen_text_json = adjustedOverlays.map(({ t, text }) => ({ t, text }));
 

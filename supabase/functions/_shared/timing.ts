@@ -139,27 +139,46 @@ export function validateOverlayTiming(
 /**
  * Generate script prompt constraints for AI
  */
-export function getScriptPromptConstraints(): string {
+export function getScriptPromptConstraints(targetDurationSec: number = VIDEO_DURATION.TARGET): string {
+  const isShort = targetDurationSec <= 10;
+  const maxWords = isShort ? VOICE_TIMING.MAX_WORDS_10SEC : VOICE_TIMING.MAX_WORDS_15SEC;
+  const targetWords = isShort ? VOICE_TIMING.SAFE_WORDS_10SEC : VOICE_TIMING.SAFE_WORDS_15SEC;
+  const minWords = Math.max(10, Math.floor(targetWords * 0.8));
+  const overlayMaxStart = Math.max(6, targetDurationSec - 3);
+
   return `
 CRITICAL TIMING CONSTRAINTS (MUST FOLLOW):
 ═══════════════════════════════════════════════════════════════
-• VIDEO LIMIT: Sora produces exactly 15 seconds of video
-• SCRIPT LENGTH: MUST be 30-38 words (NO EXCEPTIONS)
+• VIDEO LIMIT: Target duration is ${targetDurationSec} seconds
+• SCRIPT LENGTH: MUST be ${minWords}-${maxWords} words (NO EXCEPTIONS)
 • Speaking pace: Natural, ~150 words per minute
-• Duration: Script must be speakable in 13-15 seconds
+• Duration: Script must be speakable in ~${Math.max(6, targetDurationSec - 2)}-${targetDurationSec} seconds
 
 WORD COUNT RULES:
-- Minimum: 30 words (ensures engagement)
-- Target: 35 words (optimal timing)  
-- Maximum: 38 words (HARD LIMIT - do NOT exceed)
+- Minimum: ${minWords} words (ensures engagement)
+- Target: ${targetWords} words (optimal timing)
+- Maximum: ${maxWords} words (HARD LIMIT - do NOT exceed)
 
-If your script exceeds 38 words, the audio will be cut off.
+If your script exceeds ${maxWords} words, the audio will be cut off.
 Count your words carefully before outputting.
 
 ON-SCREEN TEXT TIMING:
-- All timestamps must be between 0 and 13 seconds
+- All timestamps must be between 0 and ${overlayMaxStart} seconds
 - Each overlay displays for 1.5-3 seconds
 - Maximum 5 overlays total
-- Last overlay must start by t=12 seconds
+- Last overlay must start by t=${overlayMaxStart} seconds
 ═══════════════════════════════════════════════════════════════`;
+}
+
+export function getScriptConstraintsForDuration(targetDurationSec: number = VIDEO_DURATION.TARGET): {
+  maxWords: number;
+  targetWords: number;
+  minWords: number;
+  targetDurationSec: number;
+} {
+  const isShort = targetDurationSec <= 10;
+  const maxWords = isShort ? VOICE_TIMING.MAX_WORDS_10SEC : VOICE_TIMING.MAX_WORDS_15SEC;
+  const targetWords = isShort ? VOICE_TIMING.SAFE_WORDS_10SEC : VOICE_TIMING.SAFE_WORDS_15SEC;
+  const minWords = Math.max(10, Math.floor(targetWords * 0.8));
+  return { maxWords, targetWords, minWords, targetDurationSec };
 }

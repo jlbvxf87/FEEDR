@@ -13,6 +13,7 @@ export interface ScriptGenerationParams {
   mode: string;
   variant_index: number;
   batch_size: number;
+  target_duration_sec?: number;
   /** Structured JSON prompt for better worker communication */
   structured_prompt?: StructuredPrompt;
   /** Research context from Apify scraping + Claude analysis */
