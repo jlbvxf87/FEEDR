@@ -52,7 +52,7 @@ function FeedPageContent() {
   
   // Quality mode - user controls which models to use
   const [qualityMode, setQualityMode] = useState<QualityMode>("good");
-  const [videoService, setVideoService] = useState<"sora" | "kling">("kling");
+  const [videoService, setVideoService] = useState<"sora" | "kling">("sora");
   const [userId, setUserId] = useState<string | null>(null);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   
