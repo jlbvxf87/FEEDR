@@ -238,7 +238,7 @@ function FeedPageContent() {
           image_prompts: imagePrompts,
           quality_mode: estimatedCost.mode,
           estimated_cost: estimatedCost.totalCents,
-          video_service: outputType === "video" ? videoService : undefined,
+          video_service: isDevMode && outputType === "video" ? videoService : undefined,
         },
       });
 
