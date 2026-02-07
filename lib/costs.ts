@@ -28,9 +28,11 @@ export const MODEL_COSTS = {
   },
   
   // Video models (cost per video in cents, by duration)
-  // KIE.AI charges flat rates: 10s and 15s tiers
   video: {
+    // Sora 2 Pro (KIE.AI): 10s / 15s tiers
     "sora": { per10s: 100, per15s: 150, quality: 0.95 },
+    // Kling 2.6 (KIE.AI): HD no-audio pricing
+    "kling": { per5s: 28, per10s: 55, quality: 0.9 },
   },
   
   // Image models (cost per image in cents)
@@ -102,7 +104,8 @@ export const QUALITY_TIERS: Record<QualityMode, {
 export function estimateVideoCost(
   mode: QualityMode,
   durationSeconds: number = 15,
-  scriptLength: number = 150
+  scriptLength: number = 150,
+  videoService: "sora" | "kling" = "sora"
 ): { total: number; baseCost: number; breakdown: Record<string, number> } {
   const tier = QUALITY_TIERS[mode];
   
@@ -116,17 +119,25 @@ export function estimateVideoCost(
   const voiceCosts = MODEL_COSTS.voice[tier.voiceModel as keyof typeof MODEL_COSTS.voice];
   const voiceCost = voiceCosts ? scriptLength * voiceCosts.perChar : 2;
   
-  // Video cost (flat rate per duration tier: 10s or 15s)
-  const videoCosts = MODEL_COSTS.video[tier.videoModel as keyof typeof MODEL_COSTS.video];
-  const videoCost = videoCosts
-    ? (durationSeconds <= 10 ? videoCosts.per10s : videoCosts.per15s)
-    : 150;
+  // Video cost (service-specific tiers)
+  const videoCosts = MODEL_COSTS.video[videoService as keyof typeof MODEL_COSTS.video];
+  let videoCost = 150;
+  if (videoCosts) {
+    if (videoService === "kling") {
+      const capped = Math.min(durationSeconds, 10);
+      videoCost = capped <= 5 ? videoCosts.per5s : videoCosts.per10s;
+    } else {
+      videoCost = durationSeconds <= 10 ? videoCosts.per10s : videoCosts.per15s;
+    }
+  }
   
   // Assembly cost
   const assemblyCost = 5;
 
   // Watermark removal cost (included in estimate even if disabled — covers the feature)
-  const watermarkCost = MODEL_COSTS.postProcessing["watermark-remover"].perVideo;
+  const watermarkCost = videoService === "sora"
+    ? MODEL_COSTS.postProcessing["watermark-remover"].perVideo
+    : 0;
 
   const breakdown = {
     script: Math.round(scriptCost * 100) / 100,
@@ -180,7 +191,8 @@ export function estimateImageCost(
 export function estimateBatchCost(
   mode: QualityMode,
   outputType: "video" | "image",
-  batchSize: number
+  batchSize: number,
+  videoService: "sora" | "kling" = "sora"
 ): { totalCents: number; baseCostCents: number; perItemCents: number; breakdown: Record<string, number> } {
   if (outputType === "image") {
     const estimate = estimateImageCost(mode, batchSize);
@@ -192,7 +204,7 @@ export function estimateBatchCost(
     };
   }
   
-  const estimate = estimateVideoCost(mode);
+  const estimate = estimateVideoCost(mode, 15, 150, videoService);
   return {
     totalCents: estimate.total * batchSize,
     baseCostCents: estimate.baseCost * batchSize,

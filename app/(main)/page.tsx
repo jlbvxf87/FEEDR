@@ -88,7 +88,7 @@ function FeedPageContent() {
   // Calculate estimated cost based on current settings
   const estimatedCost = useMemo(() => {
     const batchSize = outputType === "image" ? imageBatchSize : videoBatchSize;
-    const estimate = estimateBatchCost(qualityMode, outputType, batchSize);
+    const estimate = estimateBatchCost(qualityMode, outputType, batchSize, videoService);
     return {
       ...estimate,
       mode: qualityMode,
