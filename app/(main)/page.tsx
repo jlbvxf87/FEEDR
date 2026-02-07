@@ -97,7 +97,7 @@ function FeedPageContent() {
       modeLabel: QUALITY_TIERS[qualityMode].label,
       batchSize,
     };
-  }, [qualityMode, outputType, videoBatchSize, imageBatchSize]);
+  }, [qualityMode, outputType, videoBatchSize, imageBatchSize, videoService]);
 
   // Load initial data
   useEffect(() => {
@@ -268,7 +268,7 @@ function FeedPageContent() {
           image_prompts: imagePrompts,
           quality_mode: estimatedCost.mode,
           estimated_cost: estimatedCost.totalCents,
-          video_service: isDevMode && outputType === "video" ? videoService : undefined,
+          video_service: outputType === "video" ? videoService : undefined,
         },
       });
 
