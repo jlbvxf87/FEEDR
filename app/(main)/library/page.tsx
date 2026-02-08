@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabaseBrowser";
 import { ClipActions } from "@/components/ClipActions";
 import type { Batch, Clip } from "@/lib/types";
 import { cn, normalizeUIState } from "@/lib/utils";
-import { ChevronLeft, Volume2, VolumeX, Film, Image, Download, Star, Trash2 } from "lucide-react";
+import { ChevronLeft, Volume2, VolumeX, Film, Image, Download, Star, Trash2, Filter } from "lucide-react";
 import Link from "next/link";
 
 type LibraryTab = "studio" | "gallery";
@@ -32,6 +32,7 @@ function LibraryContent() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [viewMode, setViewMode] = useState<"feed" | "grid">("grid");
+  const [showFilters, setShowFilters] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
@@ -228,34 +229,14 @@ function LibraryContent() {
             <h1 className="text-lg font-semibold text-white">Library</h1>
           </div>
           
-          {/* View toggle */}
-          <div className="flex items-center bg-[#12161D] rounded-lg p-1">
-            <button
-              onClick={() => setViewMode("feed")}
-              className={cn(
-                "p-2 rounded-md transition-colors",
-                viewMode === "feed" ? "bg-[#1C2230] text-white" : "text-[#6B7A8F]"
-              )}
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-              </svg>
-            </button>
-            <button
-              onClick={() => setViewMode("grid")}
-              className={cn(
-                "p-2 rounded-md transition-colors",
-                viewMode === "grid" ? "bg-[#1C2230] text-white" : "text-[#6B7A8F]"
-              )}
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="7" height="7" />
-                <rect x="14" y="3" width="7" height="7" />
-                <rect x="3" y="14" width="7" height="7" />
-                <rect x="14" y="14" width="7" height="7" />
-              </svg>
-            </button>
-          </div>
+          {/* Filter icon */}
+          <button
+            onClick={() => setShowFilters((v) => !v)}
+            className="p-2 rounded-lg bg-[#12161D] text-[#6B7A8F] hover:text-white hover:bg-[#1C2230] transition-colors"
+            aria-label="Filters"
+          >
+            <Filter className="w-4 h-4" />
+          </button>
         </div>
         
         {/* Tab bar */}
@@ -304,32 +285,37 @@ function LibraryContent() {
           </div>
         </div>
 
-        {/* Filter pills */}
-        <div className="px-4 pb-3 flex gap-2">
-          {(["all", "winners", "killed"] as FilterType[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => {
-                setFilter(f);
-                setCurrentIndex(0);
-              }}
-              className={cn(
-                "px-4 py-1.5 rounded-full text-xs font-medium transition-all border",
-                filter === f
-                  ? f === "winners"
-                    ? "bg-[#F59E0B]/20 border-[#F59E0B]/50 text-[#F59E0B]"
-                    : f === "killed"
-                      ? "bg-red-500/20 border-red-500/50 text-red-400"
-                      : "bg-[#2EE6C9]/20 border-[#2EE6C9]/50 text-[#2EE6C9]"
-                  : "bg-transparent border-[#1C2230] text-[#6B7A8F] hover:border-[#2A3441]"
-              )}
-            >
-              {f === "all" && "All"}
-              {f === "winners" && "⭐ Winners"}
-              {f === "killed" && "🗑️ Killed"}
-            </button>
-          ))}
-        </div>
+        {/* Filter dropdown */}
+        {showFilters && (
+          <div className="px-4 pb-3">
+            <div className="flex gap-2">
+              {(["all", "winners", "killed"] as FilterType[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => {
+                    setFilter(f);
+                    setCurrentIndex(0);
+                    setShowFilters(false);
+                  }}
+                  className={cn(
+                    "px-4 py-1.5 rounded-full text-xs font-medium transition-all border",
+                    filter === f
+                      ? f === "winners"
+                        ? "bg-[#F59E0B]/20 border-[#F59E0B]/50 text-[#F59E0B]"
+                        : f === "killed"
+                          ? "bg-red-500/20 border-red-500/50 text-red-400"
+                          : "bg-[#2EE6C9]/20 border-[#2EE6C9]/50 text-[#2EE6C9]"
+                      : "bg-transparent border-[#1C2230] text-[#6B7A8F] hover:border-[#2A3441]"
+                  )}
+                >
+                  {f === "all" && "All"}
+                  {f === "winners" && "⭐ Winners"}
+                  {f === "killed" && "🗑️ Killed"}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Empty state for current tab/filter */}
