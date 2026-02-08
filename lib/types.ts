@@ -167,6 +167,7 @@ export interface Clip {
   provider?: string | null;
   provider_task_id?: string | null;
   charged_state?: ChargedState | null;
+  watermark_removal_disabled?: boolean | null;
   script_spoken: string | null;
   on_screen_text_json: OnScreenText[] | null;
   sora_prompt: string | null;

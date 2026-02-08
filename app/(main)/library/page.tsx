@@ -399,11 +399,16 @@ function LibraryContent() {
                   )}
                 </div>
                 
-                {/* Variant label */}
-                <div className="absolute bottom-2 left-2">
+                {/* Variant + provider labels */}
+                <div className="absolute bottom-2 left-2 flex gap-1">
                   <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-medium">
                     {clip.variant_id}
                   </span>
+                  {(clip.provider || clip.video_service) && (
+                    <span className="px-2 py-0.5 rounded bg-black/60 text-white text-[10px] font-semibold uppercase">
+                      {(clip.provider || clip.video_service) === "kling" ? "Kling" : "Sora"}
+                    </span>
+                  )}
                 </div>
                 
                 {/* Video icon */}

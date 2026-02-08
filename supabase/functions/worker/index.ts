@@ -833,7 +833,7 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
   // Get clip details including script for quality check
   const { data: clip, error: clipError } = await supabase
     .from("clips")
-    .select("sora_prompt, raw_video_url, script_spoken, preset_key, sora_task_id, created_at, updated_at")
+    .select("sora_prompt, raw_video_url, script_spoken, preset_key, sora_task_id, created_at, updated_at, watermark_removal_disabled")
     .eq("id", job.clip_id)
     .single();
 
@@ -913,7 +913,7 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
       duration_seconds = uploadResult.duration_seconds || duration_seconds;
 
       // Optional: Run watermark remover as a second pass
-      if (Deno.env.get("ENABLE_WATERMARK_REMOVAL") === "true") {
+      if (Deno.env.get("ENABLE_WATERMARK_REMOVAL") === "true" && !clip.watermark_removal_disabled) {
         try {
           const kieApiKey = Deno.env.get("KIE_API_KEY") || Deno.env.get("KEIAPI_API_KEY") || "";
           console.log(`[Video Poll] Running watermark remover on clip ${job.clip_id}...`);
@@ -930,6 +930,10 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
         } catch (wmError) {
           // Non-fatal: proceed with original video if remover fails
           console.warn(`[Video Poll] Watermark removal failed (using original): ${wmError}`);
+          await supabase
+            .from("clips")
+            .update({ watermark_removal_disabled: true })
+            .eq("id", job.clip_id);
         }
       }
 
@@ -1163,7 +1167,7 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
       duration_seconds = result.duration_seconds || duration_seconds;
 
       // Optional: Run watermark remover as a second pass
-      if (Deno.env.get("ENABLE_WATERMARK_REMOVAL") === "true") {
+      if (Deno.env.get("ENABLE_WATERMARK_REMOVAL") === "true" && !clip.watermark_removal_disabled) {
         try {
           const kieApiKey = Deno.env.get("KIE_API_KEY") || Deno.env.get("KEIAPI_API_KEY") || "";
           console.log(`[Video Sync] Running watermark remover on clip ${job.clip_id}...`);
@@ -1178,6 +1182,10 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
           console.log(`[Video Sync] Watermark removed for clip ${job.clip_id}`);
         } catch (wmError) {
           console.warn(`[Video Sync] Watermark removal failed (using original): ${wmError}`);
+          await supabase
+            .from("clips")
+            .update({ watermark_removal_disabled: true })
+            .eq("id", job.clip_id);
         }
       }
 
