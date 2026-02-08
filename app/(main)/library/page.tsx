@@ -226,13 +226,13 @@ function LibraryContent() {
             <Link href="/" className="p-1 -ml-1 text-[#6B7A8F] hover:text-white">
               <ChevronLeft className="w-6 h-6" />
             </Link>
-            <h1 className="text-lg font-semibold text-white">Library</h1>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Library</h1>
           </div>
           
           {/* Filter icon */}
           <button
             onClick={() => setShowFilters((v) => !v)}
-            className="p-2 rounded-lg bg-[#12161D] text-[#6B7A8F] hover:text-white hover:bg-[#1C2230] transition-colors"
+            className="p-2.5 rounded-xl bg-[#12161D] text-[#6B7A8F] hover:text-white hover:bg-[#1C2230] transition-colors border border-[#1C2230]"
             aria-label="Filters"
           >
             <Filter className="w-4 h-4" />
@@ -241,11 +241,11 @@ function LibraryContent() {
         
         {/* Tab bar */}
         <div className="px-4 pb-3">
-          <div className="flex bg-[#12161D] rounded-xl p-1">
+          <div className="flex bg-[#12161D] rounded-2xl p-1.5 border border-[#1C2230]">
             <button
               onClick={() => handleTabChange("studio")}
               className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-medium transition-all",
+                "flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold transition-all",
                 activeTab === "studio"
                   ? "bg-[#1C2230] text-white shadow-lg"
                   : "text-[#6B7A8F] hover:text-white"
@@ -255,7 +255,7 @@ function LibraryContent() {
               <span>Studio</span>
               {videoCount > 0 && (
                 <span className={cn(
-                  "px-2 py-0.5 rounded-full text-xs font-semibold",
+                  "px-2.5 py-0.5 rounded-full text-xs font-bold",
                   activeTab === "studio" ? "bg-[#2EE6C9] text-[#0B0E11]" : "bg-[#1C2230] text-[#6B7A8F]"
                 )}>
                   {videoCount}
@@ -265,7 +265,7 @@ function LibraryContent() {
             <button
               onClick={() => handleTabChange("gallery")}
               className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-medium transition-all",
+                "flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold transition-all",
                 activeTab === "gallery"
                   ? "bg-[#1C2230] text-white shadow-lg"
                   : "text-[#6B7A8F] hover:text-white"
@@ -275,7 +275,7 @@ function LibraryContent() {
               <span>Gallery</span>
               {imageCount > 0 && (
                 <span className={cn(
-                  "px-2 py-0.5 rounded-full text-xs font-semibold",
+                  "px-2.5 py-0.5 rounded-full text-xs font-bold",
                   activeTab === "gallery" ? "bg-[#A855F7] text-white" : "bg-[#1C2230] text-[#6B7A8F]"
                 )}>
                   {imageCount}
@@ -359,39 +359,47 @@ function LibraryContent() {
                   setCurrentIndex(index);
                   setViewMode("feed");
                 }}
-                className="relative aspect-square rounded-lg overflow-hidden bg-[#12161D] border border-[#1C2230] cursor-pointer group hover:border-[#2EE6C9]/50 transition-colors"
+                className={cn(
+                  "relative aspect-square rounded-xl overflow-hidden bg-[#0F131A]",
+                  "border border-[#1E2634] cursor-pointer group",
+                  "hover:border-[#2EE6C9]/60 hover:shadow-[0_0_0_1px_rgba(46,230,201,0.2),0_8px_30px_rgba(0,0,0,0.35)]",
+                  "transition-all duration-200"
+                )}
               >
                 {clip.image_url ? (
                   <img
                     src={clip.image_url}
                     alt=""
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover scale-[1.02] group-hover:scale-[1.04] transition-transform duration-300"
                   />
                 ) : clip.final_url ? (
                   <video
                     src={clip.final_url}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover scale-[1.02] group-hover:scale-[1.04] transition-transform duration-300"
                     muted
                     playsInline
                   />
                 ) : null}
                 
+                {/* Gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-transparent opacity-80 pointer-events-none" />
+
                 {/* Overlay badges */}
                 <div className="absolute top-2 right-2 flex gap-1">
                   {clip.winner && (
-                    <span className="w-6 h-6 rounded-full bg-[#F59E0B] flex items-center justify-center">
-                      <Star className="w-3 h-3 text-white fill-white" />
+                    <span className="w-7 h-7 rounded-full bg-[#F59E0B] flex items-center justify-center shadow-lg">
+                      <Star className="w-3.5 h-3.5 text-white fill-white" />
                     </span>
                   )}
                 </div>
                 
                 {/* Variant + provider labels */}
                 <div className="absolute bottom-2 left-2 flex gap-1">
-                  <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-medium">
+                  <span className="px-2.5 py-0.5 rounded-full bg-black/70 text-white text-[11px] font-bold tracking-wide">
                     {clip.variant_id}
                   </span>
                   {(clip.provider || clip.video_service) && (
-                    <span className="px-2 py-0.5 rounded bg-black/60 text-white text-[10px] font-semibold uppercase">
+                    <span className="px-2.5 py-0.5 rounded-full bg-black/70 text-white text-[10px] font-extrabold uppercase tracking-wider">
                       {(clip.provider || clip.video_service) === "kling" ? "Kling" : "Sora"}
                     </span>
                   )}
@@ -400,7 +408,7 @@ function LibraryContent() {
                 {/* Video icon */}
                 {clip.final_url && !clip.image_url && (
                   <div className="absolute bottom-2 right-2">
-                    <Film className="w-4 h-4 text-white/80" />
+                    <Film className="w-4.5 h-4.5 text-white/90 drop-shadow" />
                   </div>
                 )}
               </div>
