@@ -174,6 +174,7 @@ export interface Clip {
   voice_url: string | null;
   raw_video_url: string | null;
   final_url: string | null;
+  video_service?: string | null;
   // Image-specific fields
   image_type: ImageType | null;
   image_prompt: string | null;
