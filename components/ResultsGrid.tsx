@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { cn } from "@/lib/utils";
+import { cn, normalizeUIState } from "@/lib/utils";
 import type { Clip } from "@/lib/types";
 import { Play, Star, X } from "lucide-react";
 
@@ -30,8 +30,32 @@ function ClipTile({
   const prevWinnerRef = useRef(clip.winner);
   const prevKilledRef = useRef(clip.killed);
 
-  const isReady = clip.status === "ready";
+  const uiState = normalizeUIState(clip.ui_state, clip.status);
+  const isReady = uiState === "ready";
   const hasFinalUrl = !!clip.final_url;
+  const statusLabel = uiState === "queued" || uiState === "planned"
+    ? "Queued"
+    : uiState === "writing" || uiState === "scripting"
+    ? "Writing"
+    : uiState === "voicing" || uiState === "vo"
+    ? "Voice"
+    : uiState === "submitting"
+    ? "Submitting"
+    : uiState === "rendering"
+    ? "Rendering"
+    : uiState === "rendering_delayed"
+    ? "Rendering (Delayed)"
+    : uiState === "assembling"
+    ? "Assembling"
+    : uiState === "generating"
+    ? "Generating"
+    : uiState === "failed_not_charged"
+    ? "Failed (No Charge)"
+    : uiState === "failed_charged"
+    ? "Failed (Charged)"
+    : uiState === "canceled"
+    ? "Canceled"
+    : uiState;
 
   // Trigger animations on winner/kill change
   useEffect(() => {
@@ -107,13 +131,8 @@ function ClipTile({
           <div className="text-xs text-[var(--feedr-text-muted)] font-medium uppercase tracking-wider">
             {clip.variant_id}
           </div>
-          <div className="text-xs text-[var(--feedr-text-disabled)] mt-1 capitalize">
-            {clip.status === "planned" ? "Queued" : 
-             clip.status === "scripting" ? "Writing" : 
-             clip.status === "vo" ? "Voice" : 
-             clip.status === "rendering" ? "Rendering" : 
-             clip.status === "assembling" ? "Assembling" : 
-             clip.status}
+          <div className="text-xs text-[var(--feedr-text-disabled)] mt-1">
+            {statusLabel}
           </div>
         </div>
       )}
@@ -175,12 +194,12 @@ export function ResultsGrid({ clips, onClipClick, isLoading, batchSize }: Result
   useEffect(() => {
     const prevReadyIds = new Set(
       prevClipsRef.current
-        .filter((c) => c.status === "ready")
+        .filter((c) => normalizeUIState(c.ui_state, c.status) === "ready")
         .map((c) => c.id)
     );
     
     const newReadyClips = clips.filter(
-      (c) => c.status === "ready" && !prevReadyIds.has(c.id)
+      (c) => normalizeUIState(c.ui_state, c.status) === "ready" && !prevReadyIds.has(c.id)
     );
 
     if (newReadyClips.length > 0) {

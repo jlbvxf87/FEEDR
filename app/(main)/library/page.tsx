@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseBrowser";
 import { ClipActions } from "@/components/ClipActions";
 import type { Batch, Clip } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, normalizeUIState } from "@/lib/utils";
 import { ChevronLeft, Volume2, VolumeX, Film, Image, Download, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
 
@@ -63,14 +63,14 @@ function LibraryContent() {
       clips = clips.filter((c) => c.killed);
     }
     
-    return clips.filter((c) => c.status === "ready");
+    return clips.filter((c) => normalizeUIState(c.ui_state, c.status) === "ready");
   })();
 
   const currentClip = feedClips[currentIndex];
   
   // Count for tabs
-  const videoCount = allClips.filter((c) => c.final_url && !c.image_url && c.status === "ready").length;
-  const imageCount = allClips.filter((c) => c.image_url && c.status === "ready").length;
+  const videoCount = allClips.filter((c) => c.final_url && !c.image_url && normalizeUIState(c.ui_state, c.status) === "ready").length;
+  const imageCount = allClips.filter((c) => c.image_url && normalizeUIState(c.ui_state, c.status) === "ready").length;
 
   // Clamp index when filter/tab changes
   useEffect(() => {
@@ -86,7 +86,7 @@ function LibraryContent() {
         const { data: clipsData, error: clipsError } = await supabase
           .from("clips")
           .select("*")
-          .eq("status", "ready")
+          .or("ui_state.eq.ready,status.eq.ready")
           .order("created_at", { ascending: false })
           .limit(500);
 

@@ -32,6 +32,7 @@ const JOB_TIMEOUT_MS = 55000; // 55 seconds max per job
 const HEARTBEAT_INTERVAL_MS = 30000; // Update heartbeat every 30 seconds for long jobs
 const MAX_VIDEO_POLL_MS = 720_000; // 12 minutes max polling for Sora video generation
 const MAX_SORA_PROMPT_CHARS = 800; // Cap prompt length to prevent KIE.AI issues
+const VIDEO_RENDER_DELAY_MS = MAX_VIDEO_POLL_MS; // UI delay threshold (soft)
 
 // Timeout wrapper for async operations
 async function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
@@ -61,6 +62,56 @@ async function safeRpc(
     console.warn(`[RPC] ${rpcName} threw: ${e?.message || e}`);
     if (fallback) return await fallback();
   }
+}
+
+// UI state helper for "never-broken" progress
+async function setClipUIState(
+  supabase: any,
+  clipId: string | null | undefined,
+  ui_state:
+    | "queued"
+    | "writing"
+    | "voicing"
+    | "submitting"
+    | "rendering"
+    | "rendering_delayed"
+    | "assembling"
+    | "ready"
+    | "failed_not_charged"
+    | "failed_charged"
+    | "canceled",
+  opts?: {
+    message?: string | null;
+    provider?: "sora" | "kling" | null;
+    provider_task_id?: string | null;
+    charged_state?: "unknown" | "not_charged" | "charged" | null;
+  }
+) {
+  if (!clipId) return;
+
+  const update: Record<string, any> = {
+    ui_state,
+    ui_last_progress_at: new Date().toISOString(),
+  };
+
+  if (opts?.message !== undefined) update.ui_message = opts.message;
+  if (opts?.provider !== undefined) update.provider = opts.provider;
+  if (opts?.provider_task_id !== undefined) update.provider_task_id = opts.provider_task_id;
+  if (opts?.charged_state !== undefined) update.charged_state = opts.charged_state;
+
+  await safeRpc(
+    supabase,
+    "set_clip_ui_state",
+    {
+      p_clip_id: clipId,
+      p_ui_state: ui_state,
+      p_message: opts?.message ?? null,
+      p_provider: opts?.provider ?? null,
+      p_provider_task_id: opts?.provider_task_id ?? null,
+      p_charged_state: opts?.charged_state ?? null,
+    },
+    () => supabase.from("clips").update(update).eq("id", clipId)
+  );
 }
 
 // Helper to create child jobs idempotently
@@ -306,6 +357,10 @@ serve(async (req) => {
       // Mark associated clip as failed
       if (job.clip_id) {
         await supabase.from("clips").update({ status: "failed", error: "Job failed after max retries" }).eq("id", job.clip_id);
+        await setClipUIState(supabase, job.clip_id, "failed_not_charged", {
+          message: "Job failed after max retries.",
+          charged_state: "unknown",
+        });
       }
       
       return new Response(
@@ -408,6 +463,42 @@ serve(async (req) => {
         );
       }
 
+      const isVideoInFlight = job.type === "video" && job.payload_json?.sora_task_id;
+      if (isVideoInFlight && !jobError?.__providerFailed) {
+        const submittedAt = job.payload_json?.sora_submitted_at;
+        const elapsedMs = submittedAt
+          ? Date.now() - submittedAt
+          : 0;
+        await setClipUIState(
+          supabase,
+          job.clip_id,
+          elapsedMs > VIDEO_RENDER_DELAY_MS ? "rendering_delayed" : "rendering",
+          {
+            provider: (job.payload_json?.video_service as string) || "sora",
+            provider_task_id: job.payload_json?.sora_task_id,
+            message: elapsedMs > VIDEO_RENDER_DELAY_MS
+              ? "High demand — still rendering. We’ll keep checking automatically."
+              : null,
+          }
+        );
+        await safeRpc(supabase, "complete_job", {
+          p_job_id: job.id,
+          p_status: "queued",
+          p_error: "polling: transient",
+          p_payload: job.payload_json,
+          p_reset_attempts: true,
+        }, () => supabase
+          .from("jobs")
+          .update({ status: "queued", error: "polling: transient", payload_json: job.payload_json, attempts: 0, updated_at: new Date().toISOString() })
+          .eq("id", job.id)
+        );
+        console.log(`[Video] Transient error during polling; re-queued ${job.id}`);
+        return new Response(
+          JSON.stringify({ processed: true, job_id: job.id, job_type: job.type, polling: true }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       console.error(`Job ${job.id} error:`, jobError.message);
 
       // SMART RETRY: Classify error to determine if we should retry
@@ -455,6 +546,15 @@ serve(async (req) => {
             status: "failed", 
             error: failReason 
           }).eq("id", job.clip_id);
+          const hasProviderTask = job.type === "video" && !!job.payload_json?.sora_task_id;
+          const uiFailure =
+            hasProviderTask || jobError?.__providerFailed
+              ? "failed_charged"
+              : "failed_not_charged";
+          await setClipUIState(supabase, job.clip_id, uiFailure as any, {
+            message: failReason,
+            charged_state: hasProviderTask ? "unknown" : "not_charged",
+          });
         }
         
         console.log(`[Failed] Job ${job.id} permanently failed: ${failReason}`);
@@ -577,6 +677,7 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
       .from("clips")
       .update({ status: "scripting" })
       .eq("id", clip.id);
+    await setClipUIState(supabase, clip.id, "writing");
     
     // Generate script using AI service with timeout
     // Include research context if available from research job
@@ -672,6 +773,7 @@ async function handleTtsJob(supabase: any, job: any, services: ReturnType<typeof
       .update({ status: "vo" })
       .eq("id", job.clip_id)
       .in("status", ["planned", "scripting"]);
+    await setClipUIState(supabase, job.clip_id, "voicing");
     
     // Generate voice using AI service
     const result = await withTimeout(
@@ -702,7 +804,7 @@ async function handleTtsJob(supabase: any, job: any, services: ReturnType<typeof
   // (Video job was already created by compile in parallel with TTS)
   const { data: clipCheck } = await supabase
     .from("clips")
-    .select("raw_video_url")
+    .select("raw_video_url, sora_task_id")
     .eq("id", job.clip_id)
     .single();
 
@@ -711,8 +813,12 @@ async function handleTtsJob(supabase: any, job: any, services: ReturnType<typeof
     await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", {
       duration_seconds,
     });
+    await setClipUIState(supabase, job.clip_id, "assembling");
   } else {
     console.log(`[TTS] Voice done, waiting for video to finish for clip ${job.clip_id}`);
+    if (!clipCheck?.sora_task_id) {
+      await setClipUIState(supabase, job.clip_id, "submitting");
+    }
   }
 }
 
@@ -740,6 +846,7 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
 
   if (raw_video_url) {
     console.log(`Clip ${job.clip_id} already has raw video, skipping generation`);
+    await setClipUIState(supabase, job.clip_id, "assembling");
     // IDEMPOTENT: Create assemble job only if it doesn't already exist
     await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", {
       duration_seconds
@@ -758,18 +865,24 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
     // ═══════════════════════════════════════════════════════════════
     console.log(`[Video Poll] Checking Sora task ${existingTaskId} for clip ${job.clip_id} (payload keys: ${Object.keys(job.payload_json || {}).join(",")}, submitted_at: ${job.payload_json?.sora_submitted_at || "MISSING"})`);
 
-    // TIMEOUT GUARD: Prevent infinite polling if Sora never responds
+    // TIMEOUT GUARD (soft): We keep polling even if delayed; UI shows "delayed"
     // Check job payload first, fall back to clip's created_at as safety net
     const submittedAt = job.payload_json?.sora_submitted_at;
     const elapsedMs = submittedAt
       ? Date.now() - submittedAt
       : Date.now() - new Date(clip.updated_at || clip.created_at || Date.now()).getTime();
 
-    if (elapsedMs > MAX_VIDEO_POLL_MS) {
-      throw new Error(
-        `Video generation timed out after ${Math.round(MAX_VIDEO_POLL_MS / 60000)} minutes. ` +
-        `Sora task ${existingTaskId} never completed.`
-      );
+    if (elapsedMs > VIDEO_RENDER_DELAY_MS) {
+      await setClipUIState(supabase, job.clip_id, "rendering_delayed", {
+        provider: job.payload_json?.video_service || "sora",
+        provider_task_id: existingTaskId,
+        message: "High demand — still rendering. We’ll keep checking automatically.",
+      });
+    } else {
+      await setClipUIState(supabase, job.clip_id, "rendering", {
+        provider: job.payload_json?.video_service || "sora",
+        provider_task_id: existingTaskId,
+      });
     }
 
     if (!videoService.checkStatus) {
@@ -828,8 +941,15 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
           video_service: videoService.name,
         })
         .eq("id", job.clip_id);
+      await setClipUIState(supabase, job.clip_id, "assembling", {
+        provider: videoService.name,
+      });
 
       console.log(`[Video Poll] Video saved for clip ${job.clip_id}`);
+      await setClipUIState(supabase, job.clip_id, "assembling", {
+        provider: job.payload_json?.video_service || "sora",
+        provider_task_id: existingTaskId,
+      });
 
       // PARALLEL PIPELINE: Video is done. Check if TTS is also done — if so, create assemble.
       const { data: clipAfterVideo } = await supabase
@@ -850,7 +970,15 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
     }
 
     if (statusResult.status === "failed") {
-      throw new Error(`Sora generation failed: ${statusResult.error || "Unknown error"}`);
+      await setClipUIState(supabase, job.clip_id, "failed_charged", {
+        provider: job.payload_json?.video_service || "sora",
+        provider_task_id: existingTaskId,
+        message: `Provider reported failure: ${statusResult.error || "Unknown error"}`,
+        charged_state: "unknown",
+      });
+      const providerFail: any = new Error(`Sora generation failed: ${statusResult.error || "Unknown error"}`);
+      providerFail.__providerFailed = true;
+      throw providerFail;
     }
 
     // Still processing or pending — re-queue job to poll again next cycle
@@ -926,6 +1054,9 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
       .update({ status: "rendering" })
       .eq("id", job.clip_id)
       .in("status", ["planned", "scripting", "vo"]);
+    await setClipUIState(supabase, job.clip_id, "submitting", {
+      provider: requestedService === "kling" ? "kling" : "sora",
+    });
 
     // Check if the service supports async submit
     if (videoService.submitVideo) {
@@ -980,6 +1111,11 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
         .from("clips")
         .update({ sora_task_id: taskId })
         .eq("id", job.clip_id);
+      await setClipUIState(supabase, job.clip_id, "rendering", {
+        provider: (effectiveService === "kling" ? "kling" : "sora"),
+        provider_task_id: taskId,
+        charged_state: "unknown",
+      });
 
       // Save task_id and submission timestamp to job payload and re-queue for polling
       const updatedPayload = {
@@ -1088,6 +1224,7 @@ async function handleAssembleJob(supabase: any, job: any, services: ReturnType<t
   // IDEMPOTENCY: Check if already assembled
   if (clip.final_url && clip.status === "ready") {
     console.log(`Clip ${job.clip_id} already assembled, skipping`);
+    await setClipUIState(supabase, job.clip_id, "ready");
     return;
   }
   
@@ -1096,6 +1233,7 @@ async function handleAssembleJob(supabase: any, job: any, services: ReturnType<t
     .from("clips")
     .update({ status: "assembling" })
     .eq("id", job.clip_id);
+  await setClipUIState(supabase, job.clip_id, "assembling");
   
   // Get overlay config for preset
   const overlayConfig = PRESET_OVERLAY_CONFIGS[clip.preset_key] || PRESET_OVERLAY_CONFIGS.RAW_UGC_V1;
@@ -1128,6 +1266,7 @@ async function handleAssembleJob(supabase: any, job: any, services: ReturnType<t
       assembly_service: assemblyService.name,
     })
     .eq("id", job.clip_id);
+  await setClipUIState(supabase, job.clip_id, "ready");
 }
 
 // Handle image compile job - generates prompts for all images

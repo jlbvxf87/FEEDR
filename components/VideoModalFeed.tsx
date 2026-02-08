@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { cn } from "@/lib/utils";
+import { cn, normalizeUIState } from "@/lib/utils";
 import type { Clip } from "@/lib/types";
 import { ClipActions } from "./ClipActions";
 import { X, ChevronUp, ChevronDown } from "lucide-react";
@@ -28,7 +28,7 @@ export function VideoModalFeed({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const readyClips = clips.filter((c) => c.status === "ready");
+  const readyClips = clips.filter((c) => normalizeUIState(c.ui_state, c.status) === "ready");
   const currentClip = readyClips[currentIndex];
 
   useEffect(() => {

@@ -42,6 +42,21 @@ export type ClipStatus =
   | "ready"
   | "failed";
 
+export type ClipUIState =
+  | "queued"
+  | "writing"
+  | "voicing"
+  | "submitting"
+  | "rendering"
+  | "rendering_delayed"
+  | "assembling"
+  | "ready"
+  | "failed_not_charged"
+  | "failed_charged"
+  | "canceled";
+
+export type ChargedState = "unknown" | "not_charged" | "charged";
+
 export type JobType = "research" | "compile" | "tts" | "video" | "assemble" | "image" | "image_compile";
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
@@ -140,10 +155,18 @@ export interface OnScreenText {
 export interface Clip {
   id: string;
   created_at: string;
+  updated_at?: string;
   batch_id: string;
   variant_id: string;
   segment_type: string;
   status: ClipStatus;
+  ui_state?: ClipUIState | null;
+  ui_started_at?: string | null;
+  ui_last_progress_at?: string | null;
+  ui_message?: string | null;
+  provider?: string | null;
+  provider_task_id?: string | null;
+  charged_state?: ChargedState | null;
   script_spoken: string | null;
   on_screen_text_json: OnScreenText[] | null;
   sora_prompt: string | null;

@@ -13,7 +13,7 @@ import { PresetGrid } from "@/components/PresetGrid";
 import { ResultsGrid } from "@/components/ResultsGrid";
 import { ManufacturingPanel } from "@/components/ManufacturingPanel";
 import { VideoModalFeed } from "@/components/VideoModalFeed";
-import { cn } from "@/lib/utils";
+import { cn, normalizeUIState } from "@/lib/utils";
 
 function FeedPageContent() {
   const searchParams = useSearchParams();
@@ -440,10 +440,10 @@ function FeedPageContent() {
         .update({ status: "cancelled" as BatchStatus })
         .eq("id", currentBatch.id);
 
-      // 2. Mark all non-ready clips as failed
+      // 2. Mark all non-ready clips as canceled
       await supabase
         .from("clips")
-        .update({ status: "failed" as ClipStatus, error: "Cancelled by user" })
+        .update({ status: "failed" as ClipStatus, ui_state: "canceled", ui_message: "Cancelled by user" })
         .eq("batch_id", currentBatch.id)
         .neq("status", "ready");
 
@@ -485,7 +485,7 @@ function FeedPageContent() {
 
   const handleClipClick = useCallback((index: number) => {
     const clip = clips[index];
-    if (clip?.status === "ready") {
+    if (normalizeUIState(clip?.ui_state, clip?.status) === "ready") {
       setModalInitialIndex(index);
       setModalOpen(true);
     }
@@ -1196,8 +1196,8 @@ function FeedPageContent() {
           <section className="text-center py-12">
             <p className="text-white font-medium mb-1">Batch cancelled</p>
             <p className="text-[#6B7A8F] text-sm mb-1">
-              {clips.filter(c => c.status === "ready").length > 0
-                ? `${clips.filter(c => c.status === "ready").length} variant${clips.filter(c => c.status === "ready").length > 1 ? "s" : ""} completed before cancellation.`
+              {clips.filter(c => normalizeUIState(c.ui_state, c.status) === "ready").length > 0
+                ? `${clips.filter(c => normalizeUIState(c.ui_state, c.status) === "ready").length} variant${clips.filter(c => normalizeUIState(c.ui_state, c.status) === "ready").length > 1 ? "s" : ""} completed before cancellation.`
                 : "No variants were completed."}
             </p>
             <p className="text-[#2EE6C9] text-xs mb-4">Credits refunded — you&apos;re only charged for successful outputs.</p>

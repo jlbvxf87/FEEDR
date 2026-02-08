@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
-import { cn } from "@/lib/utils";
+import { cn, normalizeUIState } from "@/lib/utils";
 import type { Clip, Batch } from "@/lib/types";
 
 interface PipelineFeedProps {
@@ -55,15 +55,14 @@ function getCurrentPhase(clips: Clip[], batchStatus: string): string {
   if (batchStatus === "researching") return "research";
   if (clips.length === 0) return "input";
   
-  const statuses = clips.map(c => c.status);
+  const statuses = clips.map(c => normalizeUIState(c.ui_state, c.status));
   
   if (statuses.every(s => s === "ready")) return "complete";
   if (statuses.some(s => s === "assembling")) return "assembly";
-  if (statuses.some(s => s === "rendering")) return "video";
-  if (statuses.some(s => s === "generating")) return "video";
-  if (statuses.some(s => s === "vo")) return "voice";
-  if (statuses.some(s => s === "scripting")) return "script";
-  if (statuses.some(s => s === "planned")) return "script";
+  if (statuses.some(s => s === "rendering" || s === "rendering_delayed" || s === "submitting")) return "video";
+  if (statuses.some(s => s === "voicing")) return "voice";
+  if (statuses.some(s => s === "writing")) return "script";
+  if (statuses.some(s => s === "queued")) return "input";
   
   return "research";
 }
@@ -252,7 +251,7 @@ function generateMessages(
   // ═══════════════════════════════════════════════════════════════
   // PHASE 3: SCRIPT - Show scripts being written
   // ═══════════════════════════════════════════════════════════════
-  const scriptingClips = clips.filter(c => c.status === "scripting");
+  const scriptingClips = clips.filter(c => normalizeUIState(c.ui_state, c.status) === "writing");
   const hasScripts = clips.some(c => c.script_spoken);
 
   if (scriptingClips.length > 0 || hasScripts) {
@@ -272,7 +271,7 @@ function generateMessages(
     clips.forEach((clip, index) => {
       const variantLabel = clip.variant_id || `V${String(index + 1).padStart(2, '0')}`;
       
-      if (clip.status === "scripting") {
+      if (normalizeUIState(clip.ui_state, clip.status) === "writing") {
         messages.push({
           id: `msg-${msgId++}`,
           phase: "script",
@@ -301,7 +300,7 @@ function generateMessages(
   // ═══════════════════════════════════════════════════════════════
   // PHASE 4: VOICE - Recording voiceovers
   // ═══════════════════════════════════════════════════════════════
-  const voClips = clips.filter(c => c.status === "vo");
+  const voClips = clips.filter(c => normalizeUIState(c.ui_state, c.status) === "voicing");
   const hasVoice = clips.some(c => c.voice_url);
 
   if (voClips.length > 0 || hasVoice) {
@@ -310,7 +309,7 @@ function generateMessages(
 
       // Show "recording" only if status is "vo" AND no voice_url yet
       // (with parallel pipeline, status may still be "vo" after voice is done)
-      if (clip.status === "vo" && !clip.voice_url) {
+      if (normalizeUIState(clip.ui_state, clip.status) === "voicing" && !clip.voice_url) {
         messages.push({
           id: `msg-${msgId++}`,
           phase: "voice",
@@ -336,7 +335,10 @@ function generateMessages(
   // ═══════════════════════════════════════════════════════════════
   // PHASE 5: VIDEO - Rendering visuals
   // ═══════════════════════════════════════════════════════════════
-  const renderingClips = clips.filter(c => c.status === "rendering" || c.status === "generating");
+  const renderingClips = clips.filter(c => {
+    const s = normalizeUIState(c.ui_state, c.status);
+    return s === "rendering" || s === "rendering_delayed" || s === "submitting";
+  });
   const hasVideo = clips.some(c => c.raw_video_url || c.final_url);
 
   if (renderingClips.length > 0 || hasVideo) {
@@ -353,7 +355,7 @@ function generateMessages(
           message: "Visual content created successfully",
           variant: variantLabel,
         });
-      } else if (clip.status === "rendering") {
+      } else if (normalizeUIState(clip.ui_state, clip.status) === "rendering") {
         messages.push({
           id: `msg-${msgId++}`,
           phase: "video",
@@ -364,7 +366,28 @@ function generateMessages(
           variant: variantLabel,
           isActive: true,
         });
-      } else if (clip.status === "generating") {
+      } else if (normalizeUIState(clip.ui_state, clip.status) === "rendering_delayed") {
+        messages.push({
+          id: `rendering-delayed-${clip.id}`,
+          phase: "video",
+          emoji: "⏳",
+          title: "Still rendering",
+          message: clip.ui_message || "High demand — still rendering. We’ll keep checking automatically.",
+          variant: clip.variant_id,
+          isActive: true,
+          confidence: 60,
+        });
+      } else if (normalizeUIState(clip.ui_state, clip.status) === "submitting") {
+        messages.push({
+          id: `submitting-${clip.id}`,
+          phase: "video",
+          emoji: "📤",
+          title: "Submitting to provider",
+          message: "Starting the video render now...",
+          variant: clip.variant_id,
+          isActive: true,
+          confidence: 70,
+        });
         messages.push({
           id: `msg-${msgId++}`,
           phase: "video",
@@ -382,14 +405,14 @@ function generateMessages(
   // ═══════════════════════════════════════════════════════════════
   // PHASE 6: ASSEMBLY - Final merge
   // ═══════════════════════════════════════════════════════════════
-  const assemblingClips = clips.filter(c => c.status === "assembling");
-  const readyClips = clips.filter(c => c.status === "ready");
+  const assemblingClips = clips.filter(c => normalizeUIState(c.ui_state, c.status) === "assembling");
+  const readyClips = clips.filter(c => normalizeUIState(c.ui_state, c.status) === "ready");
 
   if (assemblingClips.length > 0 || readyClips.length > 0) {
     clips.forEach((clip, index) => {
       const variantLabel = clip.variant_id || `V${String(index + 1).padStart(2, '0')}`;
       
-      if (clip.status === "assembling") {
+      if (normalizeUIState(clip.ui_state, clip.status) === "assembling") {
         messages.push({
           id: `msg-${msgId++}`,
           phase: "assembly",
@@ -399,7 +422,7 @@ function generateMessages(
           variant: variantLabel,
           isActive: true,
         });
-      } else if (clip.status === "ready" && clip.final_url) {
+      } else if (normalizeUIState(clip.ui_state, clip.status) === "ready" && clip.final_url) {
         messages.push({
           id: `msg-${msgId++}`,
           phase: "complete",
@@ -431,17 +454,27 @@ function generateMessages(
   // ═══════════════════════════════════════════════════════════════
   // ERROR HANDLING - Enhanced with step context and guidance
   // ═══════════════════════════════════════════════════════════════
-  const failedClips = clips.filter(c => c.status === "failed");
+  const failedClips = clips.filter(c => {
+    const s = normalizeUIState(c.ui_state, c.status);
+    return s === "failed_not_charged" || s === "failed_charged" || s === "failed";
+  });
   failedClips.forEach((clip, index) => {
     const variantLabel = clip.variant_id || `V${String(index + 1).padStart(2, '0')}`;
-    const parsed = parseClipError(clip.error);
+    const uiState = normalizeUIState(clip.ui_state, clip.status);
+    const parsed = parseClipError(clip.ui_message || clip.error);
+    const chargeLine =
+      uiState === "failed_not_charged"
+        ? "No charges were applied for this failed render."
+        : uiState === "failed_charged"
+          ? "This render may have been charged by the provider."
+          : "";
     messages.push({
       id: `msg-${msgId++}`,
       phase: "error",
       emoji: parsed.emoji,
       title: `${variantLabel} failed${parsed.step !== "unknown" ? ` at ${parsed.step}` : ""}`,
       message: parsed.userMessage,
-      highlight: parsed.guidance,
+      highlight: [parsed.guidance, chargeLine].filter(Boolean).join(" "),
       variant: variantLabel,
     });
   });
@@ -467,7 +500,7 @@ export function PipelineFeed({ clips, batch }: PipelineFeedProps) {
   
   const allMessages = useMemo(() => generateMessages(clips, batch), [clips, batch]);
   const visibleMessages = allMessages.slice(0, visibleCount);
-  const allDone = clips.length > 0 && clips.every(c => c.status === "ready");
+  const allDone = clips.length > 0 && clips.every(c => normalizeUIState(c.ui_state, c.status) === "ready");
   const currentPhase = getCurrentPhase(clips, batch.status);
 
   // Animate messages appearing
@@ -530,7 +563,7 @@ export function PipelineFeed({ clips, batch }: PipelineFeedProps) {
             ))}
           </div>
           <span className="text-[10px] font-mono text-[#4B5563]">
-            {clips.filter(c => c.status === "ready").length}/{clips.length}
+            {clips.filter(c => normalizeUIState(c.ui_state, c.status) === "ready").length}/{clips.length}
           </span>
         </div>
       </div>

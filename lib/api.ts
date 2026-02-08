@@ -86,7 +86,7 @@ export async function getRecentWinners(limit: number = 6): Promise<Clip[]> {
     .from("clips")
     .select("*")
     .eq("winner", true)
-    .eq("status", "ready")
+    .or("ui_state.eq.ready,status.eq.ready")
     .order("created_at", { ascending: false })
     .limit(limit);
 

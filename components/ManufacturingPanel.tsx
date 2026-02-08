@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn, normalizeUIState } from "@/lib/utils";
 import type { Clip, Batch } from "@/lib/types";
 import { useMemo, useState, useEffect } from "react";
 import { PipelineFeed } from "./PipelineFeed";
@@ -39,13 +39,28 @@ function getStepTimes(videoService: "sora" | "kling") {
 function getNodes(clips: Clip[], outputType: string, batchStatus: string, hasResearch: boolean, videoService: "sora" | "kling"): Node[] {
   const stepTimes = getStepTimes(videoService);
   const statusCounts: Record<string, number> = {
-    planned: 0, scripting: 0, vo: 0, rendering: 0,
-    generating: 0, assembling: 0, ready: 0, failed: 0,
+    queued: 0,
+    writing: 0,
+    voicing: 0,
+    submitting: 0,
+    rendering: 0,
+    rendering_delayed: 0,
+    assembling: 0,
+    ready: 0,
+    failed_not_charged: 0,
+    failed_charged: 0,
+    canceled: 0,
+    planned: 0,
+    scripting: 0,
+    vo: 0,
+    generating: 0,
+    failed: 0,
   };
 
   clips.forEach((clip) => {
-    if (statusCounts[clip.status] !== undefined) {
-      statusCounts[clip.status]++;
+    const state = normalizeUIState(clip.ui_state, clip.status);
+    if (statusCounts[state] !== undefined) {
+      statusCounts[state]++;
     }
   });
 
@@ -62,9 +77,9 @@ function getNodes(clips: Clip[], outputType: string, batchStatus: string, hasRes
   const hasVoiceData = clips.some(c => c.voice_url);
   const hasVideoData = clips.some(c => c.raw_video_url);
 
-  const hasScripting = statusCounts.scripting > 0 || statusCounts.vo > 0 || statusCounts.rendering > 0 || statusCounts.generating > 0 || statusCounts.assembling > 0 || readyCount > 0;
-  const hasVo = statusCounts.vo > 0 || hasVoiceData || statusCounts.rendering > 0 || statusCounts.assembling > 0 || readyCount > 0;
-  const hasRendering = statusCounts.rendering > 0 || hasVideoData || statusCounts.generating > 0 || statusCounts.assembling > 0 || readyCount > 0;
+  const hasScripting = statusCounts.writing > 0 || statusCounts.voicing > 0 || statusCounts.rendering > 0 || statusCounts.rendering_delayed > 0 || statusCounts.assembling > 0 || readyCount > 0;
+  const hasVo = statusCounts.voicing > 0 || hasVoiceData || statusCounts.rendering > 0 || statusCounts.rendering_delayed > 0 || statusCounts.assembling > 0 || readyCount > 0;
+  const hasRendering = statusCounts.rendering > 0 || statusCounts.rendering_delayed > 0 || hasVideoData || statusCounts.assembling > 0 || readyCount > 0;
   const hasAssembling = statusCounts.assembling > 0 || readyCount > 0;
   const allReady = readyCount === total && total > 0;
 
@@ -359,7 +374,7 @@ export function ManufacturingPanel({ clips, batch, onCancel, videoService = "sor
     () => getNodes(clips, outputType, batch.status, hasResearch, videoService),
     [clips, outputType, batch.status, hasResearch, videoService]
   );
-  const readyCount = clips.filter((c) => c.status === "ready").length;
+  const readyCount = clips.filter((c) => normalizeUIState(c.ui_state, c.status) === "ready").length;
   const totalCount = clips.length;
   const allDone = readyCount === totalCount && totalCount > 0;
   const activeNode = nodes.find((n) => n.status === "active");
@@ -587,13 +602,13 @@ export function ManufacturingPanel({ clips, batch, onCancel, videoService = "sor
       )}
 
       {/* Failure summary - shown when batch has failed clips */}
-      {clips.some(c => c.status === "failed") && (
+      {clips.some(c => ["failed_not_charged","failed_charged","failed"].includes(normalizeUIState(c.ui_state, c.status))) && (
         <div className="px-5 py-3 border-t border-[#1C2230] bg-[#EF4444]/5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-sm">⚠️</span>
               <span className="text-xs text-[#EF4444]">
-                {readyCount} of {totalCount} completed. {clips.filter(c => c.status === "failed").length} had issues.
+                {readyCount} of {totalCount} completed. {clips.filter(c => ["failed_not_charged","failed_charged","failed"].includes(normalizeUIState(c.ui_state, c.status))).length} had issues.
               </span>
             </div>
             {readyCount > 0 && (
