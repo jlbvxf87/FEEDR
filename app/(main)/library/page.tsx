@@ -31,7 +31,7 @@ function LibraryContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
-  const [viewMode, setViewMode] = useState<"feed" | "grid">("feed");
+  const [viewMode, setViewMode] = useState<"feed" | "grid">("grid");
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
@@ -364,8 +364,8 @@ function LibraryContent() {
         </main>
       ) : viewMode === "grid" ? (
         /* Grid View */
-        <main className="p-4 pb-24">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <main className="p-3 pb-24">
+          <div className="grid grid-cols-3 gap-2">
             {feedClips.map((clip, index) => (
               <div
                 key={clip.id}
@@ -373,7 +373,7 @@ function LibraryContent() {
                   setCurrentIndex(index);
                   setViewMode("feed");
                 }}
-                className="relative aspect-[9/16] rounded-xl overflow-hidden bg-[#12161D] border border-[#1C2230] cursor-pointer group hover:border-[#2EE6C9]/50 transition-colors"
+                className="relative aspect-square rounded-lg overflow-hidden bg-[#12161D] border border-[#1C2230] cursor-pointer group hover:border-[#2EE6C9]/50 transition-colors"
               >
                 {clip.image_url ? (
                   <img
