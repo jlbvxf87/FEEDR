@@ -26,22 +26,11 @@ export function LogoCarousel() {
           </p>
         </AnimateIn>
 
-        <div className="hidden md:grid grid-cols-4 gap-6">
-          {brands.map((brand) => (
-            <div
-              key={brand}
-              className="rounded-2xl border border-[#1C2230] bg-[#0F131A] px-6 py-5 text-center text-sm text-[#9CA3AF] uppercase tracking-[0.2em]"
-            >
-              {brand}
-            </div>
-          ))}
-        </div>
-
-        <div className="md:hidden relative">
+        <div className="relative">
           <div className="overflow-hidden" ref={emblaRef}>
             <div className="flex gap-4">
               {brands.map((brand) => (
-                <div key={brand} className="flex-[0_0_70%]">
+                <div key={brand} className="flex-[0_0_70%] sm:flex-[0_0_45%] lg:flex-[0_0_28%]">
                   <div className="rounded-2xl border border-[#1C2230] bg-[#0F131A] px-6 py-5 text-center text-sm text-[#9CA3AF] uppercase tracking-[0.2em]">
                     {brand}
                   </div>
