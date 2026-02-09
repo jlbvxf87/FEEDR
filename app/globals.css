@@ -346,6 +346,16 @@
   }
 }
 
+/* Smooth infinite horizontal marquee (duplicate content = 50% translate for loop) */
+@keyframes marqueeHorizontal {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marqueeHorizontal 45s linear infinite;
+}
+
 /* ============================================
    SCROLLBAR (Minimal)
    ============================================ */

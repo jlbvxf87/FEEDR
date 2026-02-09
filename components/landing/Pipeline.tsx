@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AnimateIn } from "@/components/motion/AnimateIn";
-import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const steps = [
@@ -14,42 +13,10 @@ const steps = [
   { title: "Ship", detail: "Promote what wins." },
 ];
 
-const stepCards = [
-  {
-    label: "Idea",
-    meta: "UGC hook test",
-  },
-  {
-    label: "Vibe",
-    meta: "Founder POV",
-  },
-  {
-    label: "Tray",
-    meta: "12 clips",
-  },
-  {
-    label: "Winners",
-    meta: "3 promoted",
-  },
-  {
-    label: "Insights",
-    meta: "38% win rate",
-  },
-  {
-    label: "Ship",
-    meta: "Launch pack",
-  },
-];
+const DEMO_VIDEO_SRC = "/demo-pipeline.mp4";
 
 export function Pipeline() {
-  const [activeStep, setActiveStep] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setActiveStep((prev) => (prev + 1) % steps.length);
-    }, 3200);
-    return () => clearInterval(timer);
-  }, []);
+  const [videoError, setVideoError] = useState(false);
 
   return (
     <section className="section">
@@ -74,17 +41,10 @@ export function Pipeline() {
                 key={step.title}
                 className={cn(
                   "flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors",
-                  index === activeStep
-                    ? "border-[#2EE6C9]/60 bg-[#0F131A]"
-                    : "border-[#1C2230] bg-[#0B0E11]"
+                  "border-[#1C2230] bg-[#0B0E11]"
                 )}
               >
-                <div
-                  className={cn(
-                    "h-2.5 w-2.5 rounded-full",
-                    index === activeStep ? "bg-[#2EE6C9]" : "bg-[#1C2230]"
-                  )}
-                />
+                <div className="h-2.5 w-2.5 rounded-full bg-[#1C2230]" />
                 <div>
                   <p className="text-sm text-white font-medium">{step.title}</p>
                   <p className="text-xs text-[#6B7280]">{step.detail}</p>
@@ -107,39 +67,32 @@ export function Pipeline() {
           </AnimateIn>
         </div>
 
+        {/* Pipeline demo video – exact flow: idea → tray → winners → ship */}
         <div className="relative">
           <div className="absolute -inset-8 rounded-[32px] bg-[radial-gradient(circle_at_top,_rgba(31,182,255,0.2),_transparent_60%)] blur-2xl" />
-          <div className="relative rounded-[26px] border border-[#1C2230] bg-[#0F131A]/90 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <span className="text-xs uppercase tracking-[0.3em] text-[#6B7280]">Step</span>
-              <span className="text-xs text-[#2EE6C9]">{activeStep + 1} / {steps.length}</span>
+          <div className="relative rounded-[26px] border border-[#1C2230] bg-[#0F131A]/90 overflow-hidden">
+            <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+              <span className="text-xs uppercase tracking-[0.3em] text-[#6B7280]">Pipeline demo</span>
+              <span className="text-[10px] text-[#2EE6C9]">Idea → Tray → Winners → Ship</span>
             </div>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeStep}
-                initial={{ opacity: 0, y: 12, filter: "blur(6px)" }}
-                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: -12, filter: "blur(6px)" }}
-                transition={{ duration: 0.5 }}
-                className="space-y-5"
+            {videoError ? (
+              <div className="aspect-video flex flex-col items-center justify-center gap-3 bg-[#0B0E11] border-t border-[#1C2230] p-8 text-center">
+                <p className="text-sm text-[#6B7280]">Demo video not loaded.</p>
+                <p className="text-xs text-[#4B5563]">
+                  Add a screen recording to <code className="px-1.5 py-0.5 rounded bg-[#1C2230] text-[#9CA3AF]">public/demo-pipeline.mp4</code> to show the pipeline.
+                </p>
+              </div>
+            ) : (
+              <video
+                src={DEMO_VIDEO_SRC}
+                controls
+                playsInline
+                className="w-full aspect-video object-contain bg-black"
+                onError={() => setVideoError(true)}
               >
-                <div className="rounded-2xl border border-[#1C2230] bg-[#11151C] p-5">
-                  <p className="text-lg text-white font-semibold">{steps[activeStep].title}</p>
-                  <p className="text-sm text-[#6B7280]">{steps[activeStep].detail}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  {[0, 1, 2, 3].map((i) => {
-                    const card = stepCards[(activeStep + i) % stepCards.length];
-                    return (
-                      <div key={`${card.label}-${i}`} className="rounded-xl border border-[#1C2230] bg-[#0B0E11] p-4">
-                        <p className="text-sm text-white font-medium">{card.label}</p>
-                        <p className="text-xs text-[#6B7280]">{card.meta}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            </AnimatePresence>
+                Your browser does not support the video tag.
+              </video>
+            )}
           </div>
         </div>
       </div>
