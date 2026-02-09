@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimateIn } from "@/components/motion/AnimateIn";
 import { cn } from "@/lib/utils";
 
@@ -14,9 +14,18 @@ const steps = [
 ];
 
 const DEMO_VIDEO_SRC = "/demo-pipeline.mp4";
+const STEP_INTERVAL_MS = 3200;
 
 export function Pipeline() {
   const [videoError, setVideoError] = useState(false);
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveStep((prev) => (prev + 1) % steps.length);
+    }, STEP_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <section className="section">
@@ -40,11 +49,18 @@ export function Pipeline() {
               <div
                 key={step.title}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors",
-                  "border-[#1C2230] bg-[#0B0E11]"
+                  "flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors duration-300",
+                  index === activeStep
+                    ? "border-[#2EE6C9]/60 bg-[#0F131A]"
+                    : "border-[#1C2230] bg-[#0B0E11]"
                 )}
               >
-                <div className="h-2.5 w-2.5 rounded-full bg-[#1C2230]" />
+                <div
+                  className={cn(
+                    "h-2.5 w-2.5 rounded-full transition-colors duration-300",
+                    index === activeStep ? "bg-[#2EE6C9]" : "bg-[#1C2230]"
+                  )}
+                />
                 <div>
                   <p className="text-sm text-white font-medium">{step.title}</p>
                   <p className="text-xs text-[#6B7280]">{step.detail}</p>

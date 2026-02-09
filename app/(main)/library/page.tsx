@@ -33,6 +33,7 @@ function LibraryContent() {
   const [isMuted, setIsMuted] = useState(false);
   const [viewMode, setViewMode] = useState<"feed" | "grid">("grid");
   const [showFilters, setShowFilters] = useState(false);
+  const [videoThumbErrors, setVideoThumbErrors] = useState<Set<string>>(new Set());
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
@@ -90,48 +91,57 @@ function LibraryContent() {
     setCurrentIndex((prev) => Math.min(prev, Math.max(0, feedClips.length - 1)));
   }, [activeTab, filter, feedClips.length]);
 
-  // Load data
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const { data: clipsData, error: clipsError } = await supabase
+        .from("clips")
+        .select("*")
+        .or("ui_state.eq.ready,status.eq.ready")
+        .order("created_at", { ascending: false })
+        .limit(500);
+
+      if (clipsError) throw clipsError;
+      const resolvedClips = await Promise.all(
+        (clipsData || []).map(async (clip) => ({
+          ...clip,
+          final_url: await getSignedUrlIfNeeded(clip.final_url),
+          image_url: await getSignedUrlIfNeeded(clip.image_url),
+        }))
+      );
+      setAllClips(resolvedClips as Clip[]);
+
+      const { data: batchesData } = await supabase
+        .from("batches")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (batchesData) {
+        setBatches(batchesData.map(b => ({ ...b, clips: [] })) as BatchWithClips[]);
+      }
+    } catch (err) {
+      console.error("Error loading library:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [supabase, getSignedUrlIfNeeded]);
+
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        // Load all ready clips
-        const { data: clipsData, error: clipsError } = await supabase
-          .from("clips")
-          .select("*")
-          .or("ui_state.eq.ready,status.eq.ready")
-          .order("created_at", { ascending: false })
-          .limit(500);
+    loadData();
+  }, [loadData]);
 
-        if (clipsError) throw clipsError;
-        const resolvedClips = await Promise.all(
-          (clipsData || []).map(async (clip) => ({
-            ...clip,
-            final_url: await getSignedUrlIfNeeded(clip.final_url),
-            image_url: await getSignedUrlIfNeeded(clip.image_url),
-          }))
-        );
-        setAllClips(resolvedClips as Clip[]);
-
-        // Load batches for context
-        const { data: batchesData } = await supabase
-          .from("batches")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(100);
-
-        if (batchesData) {
-          setBatches(batchesData.map(b => ({ ...b, clips: [] })) as BatchWithClips[]);
-        }
-      } catch (err) {
-        console.error("Error loading library:", err);
-      } finally {
-        setIsLoading(false);
+  // Refresh data (and signed URLs) when tab becomes visible so thumbnails work after expiry
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadData();
+        setVideoThumbErrors(new Set());
       }
     };
-
-    loadData();
-  }, []);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [loadData]);
 
   // Navigation
   const goToNext = useCallback(() => {
@@ -398,14 +408,25 @@ function LibraryContent() {
                     loading="lazy"
                     decoding="async"
                   />
-                ) : clip.final_url ? (
+                ) : clip.final_url && !videoThumbErrors.has(clip.id) ? (
                   <video
                     src={clip.final_url}
                     className="w-full h-full object-cover object-[50%_20%] scale-[1.02] group-hover:scale-[1.04] transition-transform duration-300"
                     muted
                     playsInline
-                    preload="metadata"
+                    preload="auto"
+                    crossOrigin="anonymous"
+                    onLoadedMetadata={(e) => {
+                      const v = e.currentTarget;
+                      if (v.duration > 0) v.currentTime = 0;
+                    }}
+                    onError={() => setVideoThumbErrors((prev) => new Set(prev).add(clip.id))}
                   />
+                ) : clip.final_url && videoThumbErrors.has(clip.id) ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-[#0B0E11] text-[#6B7280]">
+                    <Film className="w-8 h-8 opacity-50" />
+                    <span className="text-[10px] uppercase tracking-wider">No preview</span>
+                  </div>
                 ) : null}
                 
                 {/* Gradient overlay */}
