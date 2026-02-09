@@ -39,6 +39,18 @@ function LibraryContent() {
 
   const supabase = createClient();
 
+  const getSignedUrlIfNeeded = useCallback(async (url: string | null) => {
+    if (!url) return null;
+    if (url.includes("/storage/v1/object/sign/")) return url;
+    const match = url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+    if (!match) return url;
+    const bucket = match[1] as "images" | "final" | "raw" | "voice";
+    const path = match[2];
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60);
+    if (error || !data?.signedUrl) return url;
+    return data.signedUrl;
+  }, [supabase]);
+
   // Update URL when tab changes
   const handleTabChange = (tab: LibraryTab) => {
     setActiveTab(tab);
@@ -92,7 +104,14 @@ function LibraryContent() {
           .limit(500);
 
         if (clipsError) throw clipsError;
-        setAllClips((clipsData || []) as Clip[]);
+        const resolvedClips = await Promise.all(
+          (clipsData || []).map(async (clip) => ({
+            ...clip,
+            final_url: await getSignedUrlIfNeeded(clip.final_url),
+            image_url: await getSignedUrlIfNeeded(clip.image_url),
+          }))
+        );
+        setAllClips(resolvedClips as Clip[]);
 
         // Load batches for context
         const { data: batchesData } = await supabase
