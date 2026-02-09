@@ -140,6 +140,11 @@ function generateMessages(
   const messages: FeedMessage[] = [];
   const research = batch.research_json;
   const currentPhase = getCurrentPhase(clips, batch.status);
+  const providers = clips
+    .map((c) => (c.provider || c.video_service || "").toLowerCase())
+    .filter(Boolean);
+  const useNativeAudio =
+    providers.length > 0 && providers.every((p) => p === "sora");
   let msgId = 0;
 
   // ═══════════════════════════════════════════════════════════════
@@ -303,7 +308,16 @@ function generateMessages(
   const voClips = clips.filter(c => normalizeUIState(c.ui_state, c.status) === "voicing");
   const hasVoice = clips.some(c => c.voice_url);
 
-  if (voClips.length > 0 || hasVoice) {
+  if (useNativeAudio) {
+    messages.push({
+      id: `msg-${msgId++}`,
+      phase: "voice",
+      emoji: "🔊",
+      title: "Sora native audio",
+      message: "Voice is embedded in the render",
+      variant: "All",
+    });
+  } else if (voClips.length > 0 || hasVoice) {
     clips.forEach((clip, index) => {
       const variantLabel = clip.variant_id || `V${String(index + 1).padStart(2, '0')}`;
 
