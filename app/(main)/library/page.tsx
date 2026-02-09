@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabaseBrowser";
 import { ClipActions } from "@/components/ClipActions";
 import type { Batch, Clip } from "@/lib/types";
 import { cn, normalizeUIState } from "@/lib/utils";
-import { ChevronLeft, Volume2, VolumeX, Film, Image, Download, Star, Trash2, Filter } from "lucide-react";
+import { ChevronLeft, Volume2, VolumeX, Film, Image, Download, Star, Trash2, Filter, X } from "lucide-react";
 import Link from "next/link";
 
 type LibraryTab = "studio" | "gallery";
@@ -30,7 +30,7 @@ function LibraryContent() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
   const [viewMode, setViewMode] = useState<"feed" | "grid">("grid");
   const [showFilters, setShowFilters] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -158,6 +158,11 @@ function LibraryContent() {
       videoRef.current.play().catch(() => {});
     }
   }, [currentClip?.id]);
+
+  // Default to sound on in feed view
+  useEffect(() => {
+    if (viewMode === "feed") setIsMuted(false);
+  }, [viewMode]);
 
   // Actions
   const handleToggleWinner = useCallback(async (clipId?: string) => {
@@ -370,14 +375,17 @@ function LibraryContent() {
                   <img
                     src={clip.image_url}
                     alt=""
-                    className="w-full h-full object-cover scale-[1.02] group-hover:scale-[1.04] transition-transform duration-300"
+                    className="w-full h-full object-cover object-[50%_20%] scale-[1.02] group-hover:scale-[1.04] transition-transform duration-300"
+                    loading="lazy"
+                    decoding="async"
                   />
                 ) : clip.final_url ? (
                   <video
                     src={clip.final_url}
-                    className="w-full h-full object-cover scale-[1.02] group-hover:scale-[1.04] transition-transform duration-300"
+                    className="w-full h-full object-cover object-[50%_20%] scale-[1.02] group-hover:scale-[1.04] transition-transform duration-300"
                     muted
                     playsInline
+                    preload="metadata"
                   />
                 ) : null}
                 
@@ -411,6 +419,14 @@ function LibraryContent() {
                     <Film className="w-4.5 h-4.5 text-white/90 drop-shadow" />
                   </div>
                 )}
+
+                {/* Hover hint */}
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                  <div className="absolute inset-0 bg-black/20" />
+                  <div className="absolute bottom-3 right-3 text-[10px] font-bold uppercase tracking-wider text-white/90">
+                    Tap to view
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -423,13 +439,23 @@ function LibraryContent() {
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
-          {/* Close button to go back to grid */}
-          <button
-            onClick={() => setViewMode("grid")}
-            className="absolute top-4 left-4 z-50 w-10 h-10 rounded-full bg-black/50 flex items-center justify-center text-white"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
+          {/* Exit controls */}
+          <div className="absolute top-4 left-4 right-4 z-50 flex items-center justify-between">
+            <button
+              onClick={() => setViewMode("grid")}
+              className="flex items-center gap-2 px-3 py-2 rounded-full bg-black/50 text-white text-sm font-semibold"
+            >
+              <ChevronLeft className="w-5 h-5" />
+              Back
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              className="w-10 h-10 rounded-full bg-black/50 flex items-center justify-center text-white"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
 
           {/* Full-screen content */}
           <div className="w-full h-full flex items-center justify-center">
