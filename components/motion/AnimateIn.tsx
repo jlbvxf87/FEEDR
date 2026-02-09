@@ -22,7 +22,7 @@ export function AnimateIn({ children, className, delay = 0, ...props }: AnimateI
           opacity: 1,
           y: 0,
           filter: "blur(0px)",
-          transition: { duration: 0.6, ease: "easeOut", delay },
+          transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1], delay },
         },
       }}
       {...props}
