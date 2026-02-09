@@ -1,11 +1,11 @@
 "use client";
 
-import { motion, type MotionProps } from "framer-motion";
+import { motion, type MotionProps, type Variants, type Easing } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-const easeOut = [0.16, 1, 0.3, 1] as const;
+const easeOut: Easing = [0.16, 1, 0.3, 1];
 
-export const fadeUp = {
+export const fadeUp: Variants = {
   hidden: { opacity: 0, y: 18, filter: "blur(6px)" },
   visible: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.5, ease: easeOut } },
 };
