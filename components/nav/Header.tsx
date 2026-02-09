@@ -15,7 +15,7 @@ export function Header({ showBack = false, title }: HeaderProps) {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    router.push("/login");
+    router.push("/");
   };
 
   return (
