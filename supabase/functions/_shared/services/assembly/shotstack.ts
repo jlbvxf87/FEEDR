@@ -168,12 +168,13 @@ export class ShotstackAssemblyService implements AssemblyService {
     }
 
     // Track 2: Main video - use explicit duration to match Sora output
+    // Mute raw video (volume: 0) to avoid voice overlap with voiceover soundtrack
     tracks.push({
       clips: [{
         asset: {
           type: "video",
           src: raw_video_url,
-          volume: 0.1, // Lower original video volume
+          volume: 0,
         },
         start: 0,
         length: videoDuration, // Explicit duration, not "auto"
