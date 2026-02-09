@@ -14,7 +14,7 @@ export default function EmailConfirmedPage() {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          router.push("/");
+          router.push("/feed");
           return 0;
         }
         return prev - 1;
@@ -95,7 +95,7 @@ export default function EmailConfirmedPage() {
 
         {/* Skip button */}
         <button
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/feed")}
           className="mt-8 text-[#6B7280] hover:text-white text-xs uppercase tracking-wider transition-colors"
         >
           Enter now

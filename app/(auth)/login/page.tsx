@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabaseBrowser";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 export default function LoginPage() {
@@ -71,7 +72,7 @@ export default function LoginPage() {
           password,
         });
         if (error) throw error;
-        router.push("/");
+        router.push("/feed");
         router.refresh();
       } else {
         const { data, error } = await supabase.auth.signUp({
@@ -88,7 +89,7 @@ export default function LoginPage() {
           setSuccess("Check your email to confirm your account.");
         } else if (data.session) {
           // Auto-confirmed (email confirmation disabled in Supabase)
-          router.push("/");
+          router.push("/feed");
           router.refresh();
         }
       }
@@ -179,6 +180,15 @@ export default function LoginPage() {
           <p className="text-[#6B7280] text-xs mt-4 tracking-[0.2em] uppercase">
             Generate. Scroll. Pick winners.
           </p>
+        </div>
+
+        <div className="mb-4 text-center">
+          <Link
+            href="/"
+            className="text-[#6B7280] hover:text-white text-xs transition-colors duration-150 uppercase tracking-wider"
+          >
+            Back to home
+          </Link>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

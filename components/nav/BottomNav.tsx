@@ -12,7 +12,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    href: "/",
+    href: "/feed",
     label: "Feed",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -53,8 +53,7 @@ export function BottomNav() {
       <div className="max-w-lg mx-auto px-6">
         <div className="flex items-center justify-around py-2">
           {navItems.map((item) => {
-            const isActive = pathname === item.href || 
-              (item.href !== "/" && pathname.startsWith(item.href));
+            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
             
             return (
               <Link

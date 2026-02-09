@@ -228,7 +228,7 @@ function LibraryContent() {
       <header className="sticky top-0 z-40 bg-[#0B0E11]/95 backdrop-blur-lg border-b border-[#1C2230]">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="p-1 -ml-1 text-[#6B7A8F] hover:text-white">
+            <Link href="/feed" className="p-1 -ml-1 text-[#6B7A8F] hover:text-white">
               <ChevronLeft className="w-6 h-6" />
             </Link>
             <h1 className="text-2xl font-bold text-white tracking-tight">Library</h1>
@@ -342,7 +342,7 @@ function LibraryContent() {
                 : `Create ${activeTab === "studio" ? "videos" : "images"} on the Feed to see them here`}
           </p>
           <Link
-            href="/"
+            href="/feed"
             className={cn(
               "px-6 py-3 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity",
               activeTab === "studio" 

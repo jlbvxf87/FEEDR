@@ -1,0 +1,58 @@
+"use client";
+
+import useEmblaCarousel from "embla-carousel-react";
+import { AnimateIn } from "@/components/motion/AnimateIn";
+
+const brands = [
+  "Luma Labs",
+  "Glowline",
+  "Reverb",
+  "CloudMint",
+  "Ardent",
+  "PulseKit",
+  "Trialwise",
+  "Workweek",
+];
+
+export function LogoCarousel() {
+  const [emblaRef] = useEmblaCarousel({ loop: true, align: "start" });
+
+  return (
+    <section className="section pt-0">
+      <div className="container">
+        <AnimateIn>
+          <p className="text-center text-xs uppercase tracking-[0.4em] text-[#6B7280] mb-8">
+            Trusted by teams shipping weekly
+          </p>
+        </AnimateIn>
+
+        <div className="hidden md:grid grid-cols-4 gap-6">
+          {brands.map((brand) => (
+            <div
+              key={brand}
+              className="rounded-2xl border border-[#1C2230] bg-[#0F131A] px-6 py-5 text-center text-sm text-[#9CA3AF] uppercase tracking-[0.2em]"
+            >
+              {brand}
+            </div>
+          ))}
+        </div>
+
+        <div className="md:hidden relative">
+          <div className="overflow-hidden" ref={emblaRef}>
+            <div className="flex gap-4">
+              {brands.map((brand) => (
+                <div key={brand} className="flex-[0_0_70%]">
+                  <div className="rounded-2xl border border-[#1C2230] bg-[#0F131A] px-6 py-5 text-center text-sm text-[#9CA3AF] uppercase tracking-[0.2em]">
+                    {brand}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-[#0B0E11] to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-[#0B0E11] to-transparent" />
+        </div>
+      </div>
+    </section>
+  );
+}

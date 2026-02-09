@@ -105,11 +105,41 @@
     @apply border-border;
   }
   
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  .section {
+    padding-top: clamp(4rem, 6vw, 6rem);
+    padding-bottom: clamp(4rem, 6vw, 6rem);
+  }
+
+  .container {
+    max-width: 72rem;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .landing-bg {
+    background-color: var(--feedr-bg);
+    background-image:
+      radial-gradient(700px circle at 15% -10%, rgba(46, 230, 201, 0.18), transparent 60%),
+      radial-gradient(600px circle at 85% 0%, rgba(31, 182, 255, 0.18), transparent 58%),
+      linear-gradient(rgba(46, 230, 201, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(46, 230, 201, 0.08) 1px, transparent 1px);
+    background-size: auto, auto, 80px 80px, 80px 80px;
+    background-position: center, center, center, center;
   }
 }
 
