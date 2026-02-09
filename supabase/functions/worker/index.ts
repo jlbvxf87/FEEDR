@@ -713,19 +713,23 @@ async function handleCompileJob(supabase: any, job: any, services: ReturnType<ty
       })
       .eq("id", clip.id);
     
+    const useNativeAudio = (job.payload_json?.video_service as string) === "sora";
+
     // PARALLEL PIPELINE: Create BOTH TTS and Video jobs simultaneously
-    // Sora only needs sora_prompt (already on clip), not the voice.
-    // This lets TTS and Video run in parallel — saves 5-10s off total time.
-    await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "tts", {
-      script: script_spoken,
-      video_service: job.payload_json?.video_service,
-    });
+    // If using Sora native audio, skip TTS to avoid double-voice.
+    if (!useNativeAudio) {
+      await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "tts", {
+        script: script_spoken,
+        video_service: job.payload_json?.video_service,
+      });
+    }
     await createChildJobIfNotExists(supabase, job.batch_id, clip.id, "video", {
       duration_seconds: job.payload_json?.target_duration_sec || 15,
       video_service: job.payload_json?.video_service,
       aspect_ratio: job.payload_json?.aspect_ratio || "9:16",
       video_generation_mode: job.payload_json?.video_generation_mode,
       reference_images: job.payload_json?.reference_images,
+      use_native_audio: useNativeAudio,
     });
   }
   
@@ -858,6 +862,7 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
   // Check both job payload AND clip record (clip record is durable fallback
   // in case job payload was lost on crash — prevents duplicate Sora charges)
   const existingTaskId = job.payload_json?.sora_task_id || clip.sora_task_id;
+  const useNativeAudio = !!job.payload_json?.use_native_audio;
 
   if (existingTaskId) {
     // ═══════════════════════════════════════════════════════════════
@@ -966,6 +971,20 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
         console.log(`[Video Poll] Voice also ready, creating assemble job for clip ${job.clip_id}`);
         await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", {
           duration_seconds,
+        });
+      } else if (useNativeAudio) {
+        // Sora native audio: finalize without TTS merge
+        await supabase
+          .from("clips")
+          .update({
+            final_url: raw_video_url,
+            status: "ready",
+            assembly_service: "passthrough",
+          })
+          .eq("id", job.clip_id);
+        await setClipUIState(supabase, job.clip_id, "ready", {
+          provider: job.payload_json?.video_service || "sora",
+          provider_task_id: existingTaskId,
         });
       } else {
         console.log(`[Video Poll] Video done, waiting for voice for clip ${job.clip_id}`);
@@ -1207,6 +1226,18 @@ async function handleVideoJob(supabase: any, job: any, services: ReturnType<type
       if (clipAfterSync?.voice_url) {
         await createChildJobIfNotExists(supabase, job.batch_id, job.clip_id, "assemble", {
           duration_seconds,
+        });
+      } else if (useNativeAudio) {
+        await supabase
+          .from("clips")
+          .update({
+            final_url: raw_video_url,
+            status: "ready",
+            assembly_service: "passthrough",
+          })
+          .eq("id", job.clip_id);
+        await setClipUIState(supabase, job.clip_id, "ready", {
+          provider: videoService.name,
         });
       } else {
         console.log(`[Video Sync] Video done, waiting for voice for clip ${job.clip_id}`);
