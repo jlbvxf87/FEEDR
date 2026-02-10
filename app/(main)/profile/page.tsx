@@ -7,6 +7,7 @@ import { Header } from "@/components/nav/Header";
 import { StorageDashboard } from "@/components/StorageDashboard";
 import { cn } from "@/lib/utils";
 import { formatCost } from "@/lib/costs";
+import { Package, Film, Trophy, XCircle } from "lucide-react";
 
 interface UserCredits {
   balance_cents: number;
@@ -188,23 +189,23 @@ export default function ProfilePage() {
                 <StatCard 
                   label="Batches" 
                   value={stats.totalBatches} 
-                  icon="📦" 
+                  icon={<Package className="w-5 h-5 text-[#9CA3AF]" />}
                 />
                 <StatCard 
                   label="Clips Generated" 
                   value={stats.totalClips} 
-                  icon="🎬" 
+                  icon={<Film className="w-5 h-5 text-[#9CA3AF]" />}
                 />
                 <StatCard 
                   label="Winners" 
                   value={stats.totalWinners} 
-                  icon="🏆"
+                  icon={<Trophy className="w-5 h-5 text-[#2EE6C9]" />}
                   highlight 
                 />
                 <StatCard 
                   label="Killed" 
                   value={stats.totalKilled} 
-                  icon="❌" 
+                  icon={<XCircle className="w-5 h-5 text-[#EF4444]" />}
                 />
               </div>
             </section>
@@ -298,7 +299,7 @@ function StatCard({
 }: { 
   label: string; 
   value: number; 
-  icon: string;
+  icon: React.ReactNode;
   highlight?: boolean;
 }) {
   return (
@@ -307,7 +308,7 @@ function StatCard({
       highlight && "ring-1 ring-[#2EE6C9]/30"
     )}>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-2xl">{icon}</span>
+        {icon}
         {highlight && (
           <span className="text-[10px] px-2 py-0.5 rounded bg-[#2EE6C9]/20 text-[#2EE6C9] uppercase">
             Best

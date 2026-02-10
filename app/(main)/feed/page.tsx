@@ -14,6 +14,7 @@ import { ResultsGrid } from "@/components/ResultsGrid";
 import { ManufacturingPanel } from "@/components/ManufacturingPanel";
 import { VideoModalFeed } from "@/components/VideoModalFeed";
 import { cn, normalizeUIState } from "@/lib/utils";
+import { Sparkles, Briefcase, Mic2, Search, Smartphone, Headphones, Hourglass, Film, Image as ImageIcon } from "lucide-react";
 
 function FeedPageContent() {
   const searchParams = useSearchParams();
@@ -495,6 +496,26 @@ function FeedPageContent() {
   const showManufacturing = isRunning || isGenerating;
   const selectedPresetData = presets.find(p => p.key === selectedPreset);
   const presetLabel = selectedPresetData?.name || selectedPreset;
+  const presetIcon = (() => {
+    switch (selectedPreset) {
+      case "AUTO":
+        return <Sparkles className="w-6 h-6 text-white" />;
+      case "FOUNDERS":
+        return <Briefcase className="w-6 h-6 text-white" />;
+      case "PODCAST":
+        return <Mic2 className="w-6 h-6 text-white" />;
+      case "DISCOVERY":
+        return <Search className="w-6 h-6 text-white" />;
+      case "CAMERA_PUT_DOWN":
+        return <Smartphone className="w-6 h-6 text-white" />;
+      case "SENSORY":
+        return <Headphones className="w-6 h-6 text-white" />;
+      case "DELAYED_GRATIFICATION":
+        return <Hourglass className="w-6 h-6 text-white" />;
+      default:
+        return <Film className="w-6 h-6 text-white" />;
+    }
+  })();
 
   return (
     <>
@@ -1022,13 +1043,7 @@ function FeedPageContent() {
                   selectedPreset === "DELAYED_GRATIFICATION" ? "from-[#EC4899] to-[#BE185D]" :
                   "from-[#64748B] to-[#475569]"
                 )}>
-                  {selectedPreset === "AUTO" ? "✨" :
-                   selectedPreset === "FOUNDERS" ? "💼" :
-                   selectedPreset === "PODCAST" ? "🎙️" :
-                   selectedPreset === "DISCOVERY" ? "🔍" :
-                   selectedPreset === "CAMERA_PUT_DOWN" ? "📱" :
-                   selectedPreset === "SENSORY" ? "🎧" :
-                   selectedPreset === "DELAYED_GRATIFICATION" ? "⏳" : "🎬"}
+                  {presetIcon}
                 </div>
 
                 {/* Style Info */}
@@ -1214,7 +1229,11 @@ function FeedPageContent() {
         {!currentBatch && !isGenerating && (
           <section className="text-center py-16">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[#12161D] border border-[#1C2230] flex items-center justify-center">
-              <span className="text-2xl">{outputType === "video" ? "🎬" : "🖼️"}</span>
+              {outputType === "video" ? (
+                <Film className="w-7 h-7 text-[#9CA3AF]" />
+              ) : (
+                <ImageIcon className="w-7 h-7 text-[#9CA3AF]" />
+              )}
             </div>
             <p className="text-[#6B7A8F] text-sm mb-1">
               Describe what you want to create

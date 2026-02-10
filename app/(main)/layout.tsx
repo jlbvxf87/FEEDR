@@ -35,7 +35,7 @@ export default function MainLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0E11] pb-20">
+    <div className="min-h-screen app-bg pb-20">
       {children}
       <BottomNav />
     </div>

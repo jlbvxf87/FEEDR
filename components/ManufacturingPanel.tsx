@@ -4,6 +4,7 @@ import { cn, normalizeUIState } from "@/lib/utils";
 import type { Clip, Batch } from "@/lib/types";
 import { useMemo, useState, useEffect } from "react";
 import { PipelineFeed } from "./PipelineFeed";
+import { AlertTriangle, CheckCircle2, Film, GitMerge, Keyboard, Mic2, PenLine, Search, Sparkles, Zap } from "lucide-react";
 
 interface ManufacturingPanelProps {
   clips: Clip[];
@@ -16,7 +17,7 @@ interface ManufacturingPanelProps {
 interface Node {
   id: string;
   label: string;
-  icon: string;
+  icon: React.ReactNode;
   status: "pending" | "active" | "complete";
   estimatedSeconds: number;
 }
@@ -91,22 +92,22 @@ function getNodes(clips: Clip[], outputType: string, batchStatus: string, hasRes
 
   if (outputType === "image") {
     return [
-      { id: "input", label: "Input", icon: "📝", status: "complete", estimatedSeconds: stepTimes.input },
-      { id: "research", label: "Research", icon: "🔍", status: getStatus(researchComplete, isResearching), estimatedSeconds: stepTimes.research },
-      { id: "prompt", label: "Prompt", icon: "⚡", status: getStatus(hasScripting, researchComplete && !hasScripting), estimatedSeconds: stepTimes.prompt },
-      { id: "generate", label: "Generate", icon: "🎨", status: getStatus(allReady, hasScripting && !allReady), estimatedSeconds: stepTimes.generate },
-      { id: "output", label: "Output", icon: "✨", status: getStatus(allReady, false), estimatedSeconds: stepTimes.output },
+      { id: "input", label: "Input", icon: <Keyboard className="w-5 h-5" />, status: "complete", estimatedSeconds: stepTimes.input },
+      { id: "research", label: "Research", icon: <Search className="w-5 h-5" />, status: getStatus(researchComplete, isResearching), estimatedSeconds: stepTimes.research },
+      { id: "prompt", label: "Prompt", icon: <Zap className="w-5 h-5" />, status: getStatus(hasScripting, researchComplete && !hasScripting), estimatedSeconds: stepTimes.prompt },
+      { id: "generate", label: "Generate", icon: <Sparkles className="w-5 h-5" />, status: getStatus(allReady, hasScripting && !allReady), estimatedSeconds: stepTimes.generate },
+      { id: "output", label: "Output", icon: <CheckCircle2 className="w-5 h-5" />, status: getStatus(allReady, false), estimatedSeconds: stepTimes.output },
     ];
   }
 
   return [
-    { id: "input", label: "Input", icon: "📝", status: "complete", estimatedSeconds: stepTimes.input },
-    { id: "research", label: "Research", icon: "🔍", status: getStatus(researchComplete, isResearching), estimatedSeconds: stepTimes.research },
-    { id: "script", label: "Script", icon: "✍️", status: getStatus(hasVo, researchComplete && statusCounts.scripting > 0), estimatedSeconds: stepTimes.script },
-    { id: "voice", label: "Voice", icon: "🎙️", status: getStatus(hasRendering || hasVoiceData, statusCounts.vo > 0 && !hasVoiceData), estimatedSeconds: stepTimes.voice },
-    { id: "video", label: "Video", icon: "🎬", status: getStatus(hasAssembling, hasRendering && !hasAssembling), estimatedSeconds: stepTimes.video },
-    { id: "merge", label: "Merge", icon: "🔗", status: getStatus(allReady, statusCounts.assembling > 0), estimatedSeconds: stepTimes.merge },
-    { id: "output", label: "Output", icon: "✨", status: getStatus(allReady, false), estimatedSeconds: stepTimes.output },
+    { id: "input", label: "Input", icon: <Keyboard className="w-5 h-5" />, status: "complete", estimatedSeconds: stepTimes.input },
+    { id: "research", label: "Research", icon: <Search className="w-5 h-5" />, status: getStatus(researchComplete, isResearching), estimatedSeconds: stepTimes.research },
+    { id: "script", label: "Script", icon: <PenLine className="w-5 h-5" />, status: getStatus(hasVo, researchComplete && statusCounts.scripting > 0), estimatedSeconds: stepTimes.script },
+    { id: "voice", label: "Voice", icon: <Mic2 className="w-5 h-5" />, status: getStatus(hasRendering || hasVoiceData, statusCounts.vo > 0 && !hasVoiceData), estimatedSeconds: stepTimes.voice },
+    { id: "video", label: "Video", icon: <Film className="w-5 h-5" />, status: getStatus(hasAssembling, hasRendering && !hasAssembling), estimatedSeconds: stepTimes.video },
+    { id: "merge", label: "Merge", icon: <GitMerge className="w-5 h-5" />, status: getStatus(allReady, statusCounts.assembling > 0), estimatedSeconds: stepTimes.merge },
+    { id: "output", label: "Output", icon: <CheckCircle2 className="w-5 h-5" />, status: getStatus(allReady, false), estimatedSeconds: stepTimes.output },
   ];
 }
 
@@ -185,10 +186,12 @@ function WorkflowNode({ node, index }: { node: Node; index: number }) {
         )}
 
         {/* Icon */}
-        <span className={cn(
-          "text-xl relative z-10 transition-all duration-300",
-          node.status === "pending" && "opacity-40 grayscale"
-        )}>
+        <span
+          className={cn(
+            "relative z-10 transition-all duration-300 text-white/90",
+            node.status === "pending" && "opacity-40"
+          )}
+        >
           {node.icon}
         </span>
 
@@ -232,7 +235,7 @@ function NodeConnection({ from, to }: { from: Node; to: Node }) {
 
   return (
     <div className="relative flex items-center mx-1 h-14">
-      <div className="relative w-8 h-[2px]">
+      <div className="relative w-10 h-[3px]">
         <div 
           className={cn(
             "absolute inset-0 rounded-full transition-all duration-500",
@@ -244,7 +247,7 @@ function NodeConnection({ from, to }: { from: Node; to: Node }) {
         
         {isActive && (
           <div 
-            className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_6px_#0095FF]"
+            className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#0095FF]"
             style={{ animation: "flowDot 1s ease-in-out infinite" }}
           />
         )}
@@ -500,7 +503,7 @@ export function ManufacturingPanel({ clips, batch, onCancel, videoService = "sor
             <div>
               <h3 className="text-sm font-semibold text-white">
                 {allDone 
-                  ? "🎉 Ready to post!" 
+                  ? "Ready to post!" 
                   : statusMessage || activeNode?.label || "Processing"
                 }
               </h3>
@@ -583,7 +586,7 @@ export function ManufacturingPanel({ clips, batch, onCancel, videoService = "sor
       </div>
 
       {/* Workflow visualization */}
-      <div className="p-6 overflow-x-auto">
+      <div className="px-6 py-5 overflow-x-auto bg-gradient-to-r from-[#0F131A] via-[#0B0E11] to-[#0F131A] border-t border-[#1C2230]">
         <div className="flex items-center justify-center min-w-max">
           {nodes.map((node, index) => (
             <div key={node.id} className="flex items-center">
@@ -606,7 +609,7 @@ export function ManufacturingPanel({ clips, batch, onCancel, videoService = "sor
         <div className="px-5 py-3 border-t border-[#1C2230] bg-[#EF4444]/5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-sm">⚠️</span>
+              <AlertTriangle className="w-4 h-4 text-[#F59E0B]" />
               <span className="text-xs text-[#EF4444]">
                 {readyCount} of {totalCount} completed. {clips.filter(c => ["failed_not_charged","failed_charged","failed"].includes(normalizeUIState(c.ui_state, c.status))).length} had issues.
               </span>

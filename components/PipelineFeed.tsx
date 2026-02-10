@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { cn, normalizeUIState } from "@/lib/utils";
 import type { Clip, Batch } from "@/lib/types";
+import { AlertTriangle, CheckCircle2, Film, GitMerge, Mic2, PenLine, Search, Sparkles } from "lucide-react";
 
 interface PipelineFeedProps {
   clips: Clip[];
@@ -12,7 +13,6 @@ interface PipelineFeedProps {
 interface FeedMessage {
   id: string;
   phase: "input" | "research" | "script" | "voice" | "video" | "assembly" | "complete" | "error";
-  emoji: string;
   title: string;
   message: string;
   highlight?: string;
@@ -70,63 +70,61 @@ function getCurrentPhase(clips: Clip[], batchStatus: string): string {
 // Parse raw error strings into user-friendly messages with step context
 interface ParsedError {
   step: string;
-  emoji: string;
   userMessage: string;
   guidance: string;
 }
 
 function parseClipError(rawError: string | null): ParsedError {
   if (!rawError) {
-    return { step: "unknown", emoji: "⚠️", userMessage: "Something went wrong", guidance: "We'll retry automatically" };
+    return { step: "unknown", userMessage: "Something went wrong", guidance: "We'll retry automatically" };
   }
 
   const lower = rawError.toLowerCase();
 
   // Video-specific errors
   if (lower.includes("video generation timed out") || (lower.includes("sora task") && lower.includes("never completed"))) {
-    return { step: "video", emoji: "🎬", userMessage: "Video creation took too long", guidance: "This sometimes happens with complex scenes. Try simplifying your prompt." };
+    return { step: "video", userMessage: "Video creation took too long", guidance: "This sometimes happens with complex scenes. Try simplifying your prompt." };
   }
   if ((lower.includes("sora") && lower.includes("failed")) || lower.includes("video") && lower.includes("failed")) {
-    return { step: "video", emoji: "🎬", userMessage: "AI couldn't create this video", guidance: "Try adjusting your prompt for simpler visuals." };
+    return { step: "video", userMessage: "AI couldn't create this video", guidance: "Try adjusting your prompt for simpler visuals." };
   }
   if (lower.includes("no video prompt")) {
-    return { step: "video", emoji: "🎬", userMessage: "Not enough detail for video generation", guidance: "Try a more descriptive prompt." };
+    return { step: "video", userMessage: "Not enough detail for video generation", guidance: "Try a more descriptive prompt." };
   }
 
   // Voice errors
   if (lower.includes("voice") || lower.includes("tts") || lower.includes("audio")) {
-    return { step: "voice", emoji: "🎙️", userMessage: "Voice generation failed", guidance: "This is usually temporary. Try again in a moment." };
+    return { step: "voice", userMessage: "Voice generation failed", guidance: "This is usually temporary. Try again in a moment." };
   }
 
   // Script errors
   if (lower.includes("script") || lower.includes("compile")) {
-    return { step: "script", emoji: "✍️", userMessage: "Script generation failed", guidance: "Try rewording your prompt." };
+    return { step: "script", userMessage: "Script generation failed", guidance: "Try rewording your prompt." };
   }
 
   // Assembly errors
   if (lower.includes("assembl") || lower.includes("merge") || lower.includes("overlay")) {
-    return { step: "assembly", emoji: "🔧", userMessage: "Final assembly failed", guidance: "This is usually a temporary issue. Try again." };
+    return { step: "assembly", userMessage: "Final assembly failed", guidance: "This is usually a temporary issue. Try again." };
   }
 
   // Content policy
   if (lower.includes("content policy") || lower.includes("safety") || lower.includes("violat")) {
-    return { step: "unknown", emoji: "🚫", userMessage: "Content flagged by safety filter", guidance: "Modify your prompt to avoid restricted content." };
+    return { step: "unknown", userMessage: "Content flagged by safety filter", guidance: "Modify your prompt to avoid restricted content." };
   }
 
   // Max retries
   if (lower.includes("max retries")) {
-    return { step: "unknown", emoji: "🔄", userMessage: "Failed after 3 attempts", guidance: "This usually means a temporary service issue. Try again later." };
+    return { step: "unknown", userMessage: "Failed after 3 attempts", guidance: "This usually means a temporary service issue. Try again later." };
   }
 
   // Cancelled
   if (lower.includes("cancelled by user")) {
-    return { step: "unknown", emoji: "✋", userMessage: "Cancelled by you", guidance: "Credits have been refunded." };
+    return { step: "unknown", userMessage: "Cancelled by you", guidance: "Credits have been refunded." };
   }
 
   // Default
   return {
     step: "unknown",
-    emoji: "⚠️",
     userMessage: rawError.length > 80 ? rawError.slice(0, 80) + "..." : rawError,
     guidance: "Try again or adjust your prompt.",
   };
@@ -153,7 +151,6 @@ function generateMessages(
   messages.push({
     id: `msg-${msgId++}`,
     phase: "input",
-    emoji: "👋",
     title: "Got it!",
     message: `Creating ${batch.batch_size} variations for you`,
     highlight: `"${batch.intent_text.slice(0, 50)}${batch.intent_text.length > 50 ? '...' : ''}"`,
@@ -171,7 +168,6 @@ function generateMessages(
       messages.push({
         id: `msg-${msgId++}`,
         phase: "research",
-        emoji: "🎯",
         title: "Found your niche",
         message: `Detected "${research.category.replace(/_/g, ' ')}" content`,
         highlight: research.category_info?.description,
@@ -184,7 +180,6 @@ function generateMessages(
       messages.push({
         id: `msg-${msgId++}`,
         phase: "research",
-        emoji: "🧠",
         title: isResearchActive && !hasResearch ? "Brain is thinking..." : "Smart search generated",
         message: research?.search_query 
           ? `Searching for: "${research.search_query}"`
@@ -201,7 +196,6 @@ function generateMessages(
       messages.push({
         id: `msg-${msgId++}`,
         phase: "research",
-        emoji: "🔥",
         title: "Found viral gold!",
         message: `${research.scraped_videos.length} proven winners analyzed`,
         highlight: `${Math.round(avgViews).toLocaleString()} avg views per video`,
@@ -215,7 +209,6 @@ function generateMessages(
         messages.push({
           id: `msg-${msgId++}`,
           phase: "research",
-          emoji: "💎",
           title: "Top performing hook",
           message: `This exact style got ${topVideo.views?.toLocaleString() || 'massive'} views`,
           highlight: `"${topHook.slice(0, 60)}${topHook.length > 60 ? '...' : ''}"`,
@@ -231,7 +224,6 @@ function generateMessages(
       messages.push({
         id: `msg-${msgId++}`,
         phase: "research",
-        emoji: "📊",
         title: "Patterns decoded",
         message: `Found ${patterns.length} winning formulas`,
         highlight: `#1 Pattern: "${topPattern.pattern}" (${Math.round(topPattern.frequency * 100)}% of viral hits)`,
@@ -245,7 +237,6 @@ function generateMessages(
       messages.push({
         id: `msg-${msgId++}`,
         phase: "research",
-        emoji: "🚀",
         title: "Why these work",
         message: `Key drivers: ${drivers.join(", ")}`,
         highlight: "Your content will use these same triggers",
@@ -265,7 +256,6 @@ function generateMessages(
       messages.push({
         id: `msg-${msgId++}`,
         phase: "script",
-        emoji: "✍️",
         title: "Writing your scripts",
         message: "Using those winning patterns to craft unique hooks...",
         isActive: true,
@@ -280,7 +270,6 @@ function generateMessages(
         messages.push({
           id: `msg-${msgId++}`,
           phase: "script",
-          emoji: "⚡",
           title: `Writing ${variantLabel}`,
           message: "Crafting a unique hook angle...",
           variant: variantLabel,
@@ -291,7 +280,6 @@ function generateMessages(
         messages.push({
           id: `msg-${msgId++}`,
           phase: "script",
-          emoji: "✅",
           title: `${variantLabel} script ready`,
           message: "Based on proven viral patterns",
           highlight: `"${hookPreview}${hookPreview.length < clip.script_spoken.length ? '...' : ''}"`,
@@ -312,7 +300,6 @@ function generateMessages(
     messages.push({
       id: `msg-${msgId++}`,
       phase: "voice",
-      emoji: "🔊",
       title: "Sora native audio",
       message: "Voice is embedded in the render",
       variant: "All",
@@ -327,7 +314,6 @@ function generateMessages(
         messages.push({
           id: `msg-${msgId++}`,
           phase: "voice",
-          emoji: "🎙️",
           title: `Recording ${variantLabel}`,
           message: "Adding natural, engaging voice...",
           variant: variantLabel,
@@ -337,7 +323,6 @@ function generateMessages(
         messages.push({
           id: `msg-${msgId++}`,
           phase: "voice",
-          emoji: "🔊",
           title: `${variantLabel} voice done`,
           message: "Audio sounds authentic and engaging",
           variant: variantLabel,
@@ -364,7 +349,6 @@ function generateMessages(
         messages.push({
           id: `msg-${msgId++}`,
           phase: "video",
-          emoji: "🎥",
           title: `${variantLabel} video rendered`,
           message: "Visual content created successfully",
           variant: variantLabel,
@@ -373,7 +357,6 @@ function generateMessages(
         messages.push({
           id: `msg-${msgId++}`,
           phase: "video",
-          emoji: "🎬",
           title: `Rendering ${variantLabel}`,
           message: "Sora is creating your visuals...",
           highlight: "This takes about 3-5 minutes",
@@ -384,7 +367,6 @@ function generateMessages(
         messages.push({
           id: `rendering-delayed-${clip.id}`,
           phase: "video",
-          emoji: "⏳",
           title: "Still rendering",
           message: clip.ui_message || "High demand — still rendering. We’ll keep checking automatically.",
           variant: clip.variant_id,
@@ -395,7 +377,6 @@ function generateMessages(
         messages.push({
           id: `submitting-${clip.id}`,
           phase: "video",
-          emoji: "📤",
           title: "Submitting to provider",
           message: "Starting the video render now...",
           variant: clip.variant_id,
@@ -405,7 +386,6 @@ function generateMessages(
         messages.push({
           id: `msg-${msgId++}`,
           phase: "video",
-          emoji: "🎨",
           title: `Generating ${variantLabel}`,
           message: "Creating your image with AI...",
           highlight: "This takes about 10-20 seconds",
@@ -430,7 +410,6 @@ function generateMessages(
         messages.push({
           id: `msg-${msgId++}`,
           phase: "assembly",
-          emoji: "🔧",
           title: `Assembling ${variantLabel}`,
           message: "Merging audio, video, and text overlays...",
           variant: variantLabel,
@@ -440,7 +419,6 @@ function generateMessages(
         messages.push({
           id: `msg-${msgId++}`,
           phase: "complete",
-          emoji: "🎉",
           title: `${variantLabel} is ready!`,
           message: "Ready to post - built from proven viral patterns",
           variant: variantLabel,
@@ -457,7 +435,6 @@ function generateMessages(
     messages.push({
       id: `msg-${msgId++}`,
       phase: "complete",
-      emoji: "✨",
       title: "All done!",
       message: `${clips.length} unique variations ready to post`,
       highlight: "Each one uses hooks proven to get views. Pick your favorite and go viral!",
@@ -485,7 +462,6 @@ function generateMessages(
     messages.push({
       id: `msg-${msgId++}`,
       phase: "error",
-      emoji: parsed.emoji,
       title: `${variantLabel} failed${parsed.step !== "unknown" ? ` at ${parsed.step}` : ""}`,
       message: parsed.userMessage,
       highlight: [parsed.guidance, chargeLine].filter(Boolean).join(" "),
@@ -506,6 +482,17 @@ const PHASE_COLORS: Record<string, { text: string; bg: string; border: string }>
   assembly: { text: "text-[#2EE6C9]", bg: "bg-[#2EE6C9]/10", border: "border-[#2EE6C9]/30" },
   complete: { text: "text-[#22C55E]", bg: "bg-[#22C55E]/10", border: "border-[#22C55E]/30" },
   error: { text: "text-[#EF4444]", bg: "bg-[#EF4444]/10", border: "border-[#EF4444]/30" },
+};
+
+const PHASE_ICONS: Record<FeedMessage["phase"], React.ReactNode> = {
+  input: <Sparkles className="w-4 h-4 text-white/80" />,
+  research: <Search className="w-4 h-4 text-white/80" />,
+  script: <PenLine className="w-4 h-4 text-white/80" />,
+  voice: <Mic2 className="w-4 h-4 text-white/80" />,
+  video: <Film className="w-4 h-4 text-white/80" />,
+  assembly: <GitMerge className="w-4 h-4 text-white/80" />,
+  complete: <CheckCircle2 className="w-4 h-4 text-[#22C55E]" />,
+  error: <AlertTriangle className="w-4 h-4 text-[#EF4444]" />,
 };
 
 export function PipelineFeed({ clips, batch }: PipelineFeedProps) {
@@ -612,7 +599,7 @@ export function PipelineFeed({ clips, batch }: PipelineFeedProps) {
 
               {/* Header row */}
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-base">{msg.emoji}</span>
+                <span className="text-base">{PHASE_ICONS[msg.phase]}</span>
                 <span className={cn("font-semibold text-sm", colors.text)}>
                   {msg.title}
                 </span>
@@ -658,7 +645,7 @@ export function PipelineFeed({ clips, batch }: PipelineFeedProps) {
         {allDone && (
           <div className="text-center py-4">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#22C55E]/20 to-[#2EE6C9]/20 border border-[#22C55E]/30">
-              <span className="text-lg">🎊</span>
+              <CheckCircle2 className="w-4 h-4 text-[#22C55E]" />
               <span className="text-sm font-medium text-[#22C55E]">
                 Your content is ready to go viral!
               </span>

@@ -356,9 +356,11 @@ function LibraryContent() {
       {feedClips.length === 0 ? (
         <main className="flex flex-col items-center justify-center min-h-[50vh] px-4">
           <div className="w-20 h-20 rounded-2xl bg-[#12161D] border border-[#1C2230] flex items-center justify-center mb-6">
-            <span className="text-4xl">
-              {activeTab === "studio" ? "🎬" : "🖼️"}
-            </span>
+            {activeTab === "studio" ? (
+              <Film className="w-9 h-9 text-[#9CA3AF]" />
+            ) : (
+              <Image className="w-9 h-9 text-[#9CA3AF]" />
+            )}
           </div>
           <p className="text-white font-semibold text-lg mb-2">
             {activeTab === "studio" ? "No videos yet" : "No images yet"}

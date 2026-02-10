@@ -141,6 +141,17 @@
     background-size: auto, auto, 80px 80px, 80px 80px;
     background-position: center, center, center, center;
   }
+
+  .app-bg {
+    background-color: var(--feedr-bg);
+    background-image:
+      radial-gradient(600px circle at 20% -20%, rgba(46, 230, 201, 0.12), transparent 60%),
+      radial-gradient(500px circle at 85% 0%, rgba(31, 182, 255, 0.12), transparent 58%),
+      linear-gradient(rgba(46, 230, 201, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(46, 230, 201, 0.06) 1px, transparent 1px);
+    background-size: auto, auto, 90px 90px, 90px 90px;
+    background-position: center, center, center, center;
+  }
 }
 
 /* ============================================
